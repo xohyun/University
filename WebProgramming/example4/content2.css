@@ -1,0 +1,50 @@
+#notice {
+	margin-left : 18%;
+	text-decoration : none;
+	color : black;
+}
+nav ul {
+	list-style : none;
+	text-align : center;
+	border-top : 5px solid green;
+	border-bottom : 5px solid green;
+	padding : 30px 0;
+	float : left;
+	width : 15%;
+	margin-right : 20px;
+	margin-bottom : 100%;
+	position : fixed;
+}
+ul li {
+	padding : 8px 0;
+	font-size : 18pt;
+}
+ul li a {
+	text-decoration : none;
+	color : black;
+}
+ul li a:hover {
+	text-decoration: underline;
+}
+h3 {
+	font-size : 20pt;
+	text-decoration : none;
+	color : green;
+	font-weight : bold;
+}
+div {
+	margin-left: 18%;
+	width : 70%;
+	border : 8px dashed green;
+	background-color : rgb(198, 255, 140);
+	float : left;
+	padding : 30px;
+	color : black;
+	margin-top : 10px;
+	padding-left: 60px;
+	padding-right: 60px;
+}
+em {
+	font-weight : bold;
+}
+	

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<script>
+	function get() {
+		if (isNaN(document.getElementById('n').value))
+			alert("숫자가 아닙니다.");
+		else
+			alert ("숫자입니다.");
+	}
+	//숫자가 아니라면 isNaN(n)이 참이 된다.number가 숫자인지 확인, 숫자가 아니면 true를 리턴
+	</script>
+<head>
+<body>
+	<div>숫자를 입력하시오.</div>
+	<input type = "text" id = "n">
+	<button onclick = "get()">입력완료</button>
+</body>
+</html>

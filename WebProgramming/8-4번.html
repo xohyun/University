@@ -1,0 +1,20 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+	<script>
+		function time(first, second) {
+			return (second - first)
+		}
+		
+		var start = new Date();
+		var result = 0;
+		var i;
+		
+		for (i = 0; i < 1000000; i++) {
+			result = time(start, new Date());
+		}
+		
+		document.write(result + "밀리초가 걸렸음!");
+	</script>
+</head>
+</html>

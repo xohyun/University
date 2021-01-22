@@ -1,0 +1,17 @@
+h1, h2 {
+	font-family: serif;
+	font-size: 25pt;
+	color: green;
+}
+strong, em {
+	font-family: Georgia;
+	font-size: 15pt;
+	font-style: italic;
+	color: orange;
+}
+ul ul li {
+	font-family: "Courier New", Times;
+	font-size: 18pt;
+	color: red;
+	font-weight: bold;
+}
