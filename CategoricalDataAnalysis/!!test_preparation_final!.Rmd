@@ -1,0 +1,528 @@
+---
+title: "preparing_final"
+output: 
+  html_document : 
+    toc : TRUE
+    theme: united
+    toc_depth : 3
+    toc_float: 
+      collapsed : false
+---
+# **Chapter 5. **
+다항 반응 분포의 추론.
+
+로지스틱 모형을 반응 변수가 다범주일 때로 확장.
+
+범주가 순서를 가지는지의 여부에 따라 명목형 / 순서형
+
+$\beta_{0k}$ : 공변량이 없을 때, $\pi_{k}$는 $\pi_{j}$의 $e^{\beta_{0k}}$배이다.
+
+$\beta_{1k}$ : x가 한 단위 증가할 때마다, $\pi_{k}$는 $\pi_{j}$의 $e^{\beta_{1k}}$배 만큼 증가한다.
+
+(p+1)(J-1)개의 모수가 필요하다.
+
+# 명목형 반응변수
+## 예제 5.1
+```{r}
+aligator <- read.table("./data/aligator.txt")
+colnames(aligator) <- c("size", "prey")
+head(aligator)
+table(aligator$prey)
+
+#aggregate('함수를 적용하고자 하는 컬럼' ~ '기준이 되는 컬럼', data, FUN)
+aggregate(size~prey, data = aligator, mean)
+```
+
+두 모형의 기준 범주가 서로 다르다.
+
+### vglm : 마지막 수준을 기준 범주
+```{r}
+library(VGAM)
+all_fit1 <- vglm(prey~size, data = aligator, family = multinomial)
+all_fit1
+```
+F / I / O
+
+log(Pr(F)/Pr(O)) = 1.617 - 0.1101 length
+
+log(Pr(I)/Pr(O)) = 5.697 - 2.465 length
+
+
+### nnet : 첫 번째 수준을 기준 범주
+```{r}
+library(nnet)
+all_fit2 <- multinom(prey~size, data = aligator)
+all_fit2
+summary(all_fit2)
+```
+Residual deviance는 98.34124로 같은 것을 알 수 있다. 
+
+F / I / O
+
+log(Pr(I)/Pr(F)) = 4.079 - 2.355 length
+
+log(Pr(O)/Pr(F)) = -1.617 + 0.110 length
+
+* |-2.355/0.8032| > 1.96 으로 유의하다.
+
+즉, 길이가 길수록, 무척추 동물을 먹이로 하기보다는 Fish를 주먹이로 할 가능성이 더 높다. 길이가 1meter 길수록 무척추 동물보다는 fish를 주요 먹이로 할 확률이 exp(2.355)=10.53배 더 증가한다. 현실적으로 1meter 씩 커지는 것은 불가능하므로 0.1meter(10cm) 길수록 exp(0.2355)=1.26배 증가한다고 할 수 있다.
+
+* 비슷한 방법으로, |0.1101/0.517| < 1.96 으로 유의하지 않다.
+
+즉, fish를 먹는 악어와 Other(잡식성) 악어와는 길이에 큰 차이가 없다.
+
+## 예제 5.2
+```{r}
+library(faraway)
+head(nes96)
+str(nes96)
+table(nes96$PID)
+sPID <- nes96$PID
+levels(sPID) <- c("Democrat", "Democrat", "Independent", "Independent",
+                  "Independent", "Republican", "Republican")
+summary(sPID)
+table(nes96$educ)
+educ2 <- c(9, 10, 12, 13, 14, 16, 18)
+educa <- educ2[unclass(nes96$educ)]
+
+inca <- c(3,4,6,8,9.5,10.5,11.5,12.5,13.5,14.5,16,18.5,21,23.5,27.5,32.5,37.5,42.5,47.5,55,67.5,82.5,97.5,115)
+nincome <- inca[unclass(nes96$income)]
+
+fit <- multinom(sPID ~ nes96$age + educa + nincome)
+summary(fit)
+```
+democrate가 여기서 기준 변수
+
+```{r}
+#수입(income) 변수의 유의성 검토
+fit1 <- multinom(sPID ~ nes96$age + educa)
+deviance(fit1) - deviance(fit)
+
+fit$edf #fit에서 사용되어지는 parameter의 개수
+fit1$edf 
+
+pchisq((deviance(fit1) - deviance(fit)), df = 2, lower.tail = F)
+```
+$H_0$ : 수입은 정치 성향에 영향을 주지 않는다.
+
+$H_0$ : 수입은 정치 성향에 영향을 준다. 
+
+p-value가 1.030407e-10이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 축소모형은 적합하지 못하다. 즉, nincome을 제외한 fit1 모형은 적합하지 못하다. 즉, nincome은 유의한 변수다.
+
+
+```{r}
+#교육변수의 유의성 검토
+fit2 <- multinom(sPID ~ nes96$age + nincome)
+deviance(fit2) - deviance(fit)
+
+fit$edf #fit에서 사용되어지는 parameter의 개수
+fit2$edf 
+
+pchisq((deviance(fit2) - deviance(fit)), df = 2, lower.tail = F)
+```
+$H_0$ : 교육 정도는 정치 성향에 영향을 주지 않는다.
+
+$H_0$ : 교육변수는 정치 성향에 영향을 준다. 
+
+p-value가 0.8770246이므로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 축소모형은 적합하다고 볼 수 있다. 즉, educa 변수는 유의한 변수가 아니다.
+
+```{r}
+#age의 유의성 검토
+## 주의!!!
+fit3 <- multinom(sPID ~ nincome)
+deviance(fit3) - deviance(fit)
+
+fit2$edf #fit에서 사용되어지는 parameter의 개수
+fit3$edf 
+
+pchisq((deviance(fit3) - deviance(fit2)), df = 2, lower.tail = F)
+```
+
+$H_0$ : 나이는 정치 성향에 영향을 주지 않는다.
+
+$H_0$ : 나이는 정치 성향에 영향을 준다. 
+
+p-value가 0.6407895이므로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 축소모형은 적합하다고 볼 수 있다. 즉, age 변수는 유의한 변수가 아니다.
+
+따라서 최종적으로 income 변수만을 포함한 모형을 고려한다.
+
+```{r}
+summary(fit3)
+```
+$log(\frac{\pi_I}{\pi_D}) = -1.175 + 0.01609nincome$
+
+$log(\frac{\pi_R}{\pi_D}) = -0.0951 + 0.01767nincome$
+
+수입을 고려한 경우(단위 $1000)
+
+* 수입이 $1000 증가할수록 Independence 성향일 확률은 Democrat 성향일 확률의 exp(0.01609) = 1.01622배 이다. 즉, 1.6% 증가한다.
+
+* 수입이 $100 증가할수록 Republican 성향일 확률은 Democrat 성향일 확률의 exp(0.017) = 1.017배 이다. 즉, 1.7% 증가한다.
+
+즉, 수입이 낮을수록 민주당 정치 성향을 가질 확률이 높으며
+
+민주당과 공화당 간에 소득수준은 유의한 차이가 있으며
+
+민주당과 무소속 간에도 소득 수준은 유의한 차이가 있었다.
+
+
+# 순서형 반응변수
+
+## 예제 5.3
+비례오즈를 가지는 누적 로짓 모형
+
+명목형 변수와 달리 x의 효과가 누적 로짓의 모든 수준에 대해 동일함을 가정한다.
+
+즉, 절편은 다르며 기울기는 같음을 가정(비례오즈)
+
+$\beta > 0$이면 x가 증가할수록 y의 높은 수준ㅇ르 가지는 경향이 보인다.
+
+상위 수준의 절편이 이전 수준의 절편보다 더 크다.
+
+```{r}
+library(MASS)
+fitord <- polr(sPID ~ nes96$age + educa + nincome)
+summary(fitord)
+step(fitord)
+```
+정치성향을 순서형 반응변수로 간주하여 분석한 결과, 수입 변수만이 유의하였다. 즉, Democrat < Independent < Republican일 때, 수입이 많을수록 Republican의 성향을 가지게 된다.
+
+
+## 예제 5.4
+```{r}
+gender <- rep(c("F", "M"), each = 2)
+trt <- rep(c("NEW", "PLACEBO"),2)
+improv <- rep(c("Marked", "Some", "None"), each = 4)
+freq <- c(16,6,5,1,5,7,2,0,6,19,7,10)
+arthritis <- data.frame(gender,trt,improv,freq)
+
+improv1 <- factor(improv, levels = c("None", "Some", "Marked"), ordered = T)
+fit <- polr(improv1 ~ gender + trt, weights = freq, data = arthritis)
+summary(fit)
+```
+1.319/0.5381 = 2.451217 > 1.96 유의
+
+1.797/0.4718 = 3.808817 > 1.96 유의
+
+-니까 해석 그대로.
+
+gender가 M일수록 Y가 작은 값을 가진다. = None
+즉, 남성일수록 효과가 없다. 플로시보 일수록 효과가 없다.
+
+<회귀계수의 해석>
+* 성별에 따라 통증 개선에 유의적인 차이가 있었다. 남성이 여성에 비해 통증 개선이 거의 없음을 알 수 있다.
+
+* 두 가지 치료법은 통증 개선에 유의적인 차이가 있었다. 즉, 기존 치료법은 통증개선이 없음을 볼 수 있다.
+
+* 교호작용 : 즉, 성별과 두 가지 치료법의 상호 작영 여부를 알아보자.
+
+```{r}
+fit1 <- polr(improv1 ~ gender + trt + gender * trt, weights = freq, data = arthritis)
+summary(fit1)
+```
+0.6822/1.277 = 0.5342208 < 1.96이므로 유의하지 않다.
+
+fit1의 모형에 의하면 성별에 따른 치료법의 효과의 차이는 존재하지 않음.
+
+```{r}
+deviance(fit) - deviance(fit1)
+fit1$edf - fit$edf
+pchisq((deviance(fit) - deviance(fit1)), 1, lower.tail = F)
+```
+$H_0$ : fit 모형이 맞다(reduced model이 맞다.)
+
+p-value가 0.5786299로 유의수준 0.05하에서 귀무가설을 기각하지 못한다. 따라서 fit 모형(교호작용이 없는 모형)이 더 낫다.
+
+
+# **Chapter 6. **
+계수형 반응 변수
+
+# 포아송 회귀 모형
+## 예제 6.1
+173마리의 horse shoe crab(참게, 투구게)
+
+Y : 암 참게의 집에 붙어사는 숫참게의 수 (Y = 0,1,2..)
+X : 암 참게의 등딱지 너비 / color 숫자가 커질수록 어두운 색깔
+
+```{r}
+crab <- read.table("./data/crab.txt", col.names = c("color", "spine", "width", "satell", "weight"))
+#head(crab)
+summary(crab$width)
+table(crab$satell)
+plot(crab$width, crab$satell)
+```
+어떤 linear pattern도 없음. 선형식이 뚜렷하게 보이지 않음.
+
+```{r}
+fit1 <- glm(satell~width, data=crab,family = "poisson")
+summary(fit1)
+```
+암게의 등딱지 너비는 부수체의 수에 유의한 영향을 준다. 좀 더 구체적으로 exp(0.164) = 1.18으로, 등딱지 너비가 1cm 증가할 때마다 부수체의  평균 수는 18% 만큼 증가한다. 
+
+```{r}
+fit2 <- glm(satell~width+factor(color), family = "poisson", data = crab)
+summary(fit2)
+```
+```{r}
+pchisq(567.88-559.34,171-168,lower.tail = F)
+#deviance(fit1)-deviance(fit2)
+```
+귀무가설을 기각할 수 있다. 따라서, color 변수는 유의한 변수이다. 귀무가설 : color 변수의 효과는 없다.
+
+```{r}
+fit3 <- glm(satell~width+color, family = "poisson", data = crab)
+summary(fit3)
+```
+color을 연속형 변수로 보아도, 유의. 
+
+등딱지의 폭이 1cm 증가할 때마다, 부수체의 수는 exp(0.14957) = 1.16배 증가한다. 색깔이 진할수록, 부수체의 수가 감소.
+
+```{r}
+par(mfrow = c(1,2))
+halfnorm(residuals(fit2))
+plot(log(fitted(fit2)), log((crab$satell-fitted(fit2))^2), xlab = expression(hat(mu)), ylab = expression((y-hat(mu))^2))
+abline(0,1)
+```
+
+
+
+# 음이항 회귀 모형
+## 예제 6.1
+```{r}
+library(MASS)
+fit3 <- glm.nb(satell~width, data = crab)
+summary(fit3)
+```
+|0.905/0.161|=5.621118 > 1.96
+
+
+## 예제 6.2
+
+```{r}
+age <- c(16,22,23,17,23,23,23,22,42,20,18,13,34,50,19,22,30,27,22,34)
+trt <- rep(c("NSAID", "Pla"),c(9,11))
+number <- c(2,17,1,25,3,33,3, 1,4,63,28,61,7,15,44,28,10,40,46,50)
+poly <- data.frame(number,age, trt)
+poly
+
+m0.poly <- glm(number ~ age*trt, data = poly, family = poisson)
+summary(m0.poly)
+```
+
+교호작용이 유의하지 않음
+
+```{r}
+m1.poly <- glm(number~age + trt, data = poly, family = poisson)
+summary(m1.poly)
+```
+나이가 작을수록 위약그룹일 때 용종의 수가 많아진다.
+
+```{r}
+library(MASS)
+m3.poly <- glm.nb(number~age+trt, data = poly)
+summary(m3.poly)
+```
+음이항 회귀 모형을 적용했을 때, 
+
+Dispersion parameter for Negative Binomial (1.7195) family taken to be 1
+
+표준 오차가 더 큼
+
+1.719/0.607 = 2.83196 > 1.96 
+가족마다 variation이 크다. 개체마다 사람마다 variation이 크다.
+확실하게 이 모형이 낫다.
+
+음이항 분포의 AIC가 더 작은 값을 가진다.
+나이가 적을수록 용종발생률이 적다.
+위약이 비스테로이드 소염제보다 용종 발생률이 exp(1.36812) = 3.9배 더 많다.
+
+```{r}
+AIC(m1.poly)
+AIC(m3.poly)
+```
+# 발생률 model
+
+```{r}
+rail <- read.table("./data/rail.txt", col.names = c("usage", "acci"))
+rail$year <- seq(1:29)
+#head(rail)
+fit <- glm(acci~year + offset(log(usage)), data = rail, family = poisson)
+summary(fit)
+```
+```{r}
+fit1 <- glm.nb(acci~year + offset(log(usage)), data = rail)
+summary(fit1)
+```
+AIC = 126.69 + 6 = 132.69 (p = 3)
+
+# 영 과잉 모델
+```{r}
+library(pscl)
+data.zip <- read.table("./data/data.zip.txt")
+model.zip <- zeroinfl(Resp~Trt|1, data = data.zip)
+summary(model.zip)
+```
+```{r}
+model.zip2 <- zeroinfl(Resp~Trt|Trt, data = data.zip)
+summary(model.zip2)
+```
+
+# **Chapter 7. **
+분할표에 대한 로그 선형모형
+
+### 독립모형
+```{r}
+smoking <- gl(2,1,4,labels = c("yes","no"))
+alchol <- gl(2,2,4,labels = c("yes", "no"))
+y <- c(911+538, 44+456, +43, 2+279)
+ex <- data.frame(alchol, smoking, y)
+fit0 <- glm(y~alchol+smoking,data = ex, family = poisson)
+summary(fit0)
+```
+alcholno가 음수 : 음주를 하는 사람이 더 많다.
+smokingno가 음수 : 흡연을 하는 사람이 더 많다.
+
+### 포화 모형
+```{r}
+fit1 <- glm(y~alchol*smoking, data = ex, family = poisson)
+summary(fit1)
+```
+alcholno와 smokingno가 +의 관계를 가지더라.
+얼마나 연관관계가 있는가는 2.8의 값을 이용.
+
+
+금연과 비음주는 양의 연관관계를 가진다.
+
+금연그룹의 비음주 오즈는 흡연그룹의 비음주 오즈의 exp(2.873)=17.64배이다.
+
+비음주그룹에서 금연오즈는 음주그룹에서 금연 오즈의 17.64배이다.
+
+
+## 인종과 사후세계 믿음과의 관계
+
+```{r}
+race <- rep(c("white","black","other"),each = 2)
+belief <- rep(c("no", "yes"), time = 3)
+y = c(1339, 300, 260, 55, 88, 22)
+
+bel <- xtabs(y~race+belief)
+fit0 <- glm(y~race+belief, data=bel, family = poisson)
+summary(fit0)
+```
+AIC = 165.93
+
+```{r}
+fit1 <- glm(y~race*belief, data=bel, family = poisson)
+summary(fit1)
+```
+AIC = 53.081
+교호작용은 유의하다.
+* raceother : 사후세계에 대한 belief = yes가 belief = no보다 많다.
+* racewhite : 사후세계에 대한 belief = yes가 belief = no보다 많다.
+* raceblack : 사후세계에 대한 belief = yes가 belief = no보다 적다.
+
+## IxJxK 분할표에 대한 로그 선형 모형
+```{r}
+alchol <- gl(2,4,8, labels = c("yes","no"))
+smoking <- gl(2,2,8, labels = c("yes","no"))
+mari <- gl(2,1,8, labels = c("yes","no"))
+y <- c(911,538,44,456,3,43,2,279)
+three <- data.frame(alchol,smoking, mari, y)
+#three
+```
+
+### 상호독립모형
+```{r}
+three_fit0 <- glm(y~alchol+smoking+mari, data = three, family = poisson)
+summary(three_fit0)
+```
+각 변수에서 수준들 간의 차이를 검정한다. 이는 단지 각 수준의 크기 정보만을 ㅈ공한다. 예를 들어 alcohol과 smoking에서는 yes라고 답한 사람이 no라고 답한 사람보다 많고, mari에선 no라고 답한 사람이 많았다.
+
+### 동질 연관성
+두 변수끼리 짝을 지을 때, 각 쌍에서 정의되는 연관성은 다른 변수의 모든 수준에서 동일함을 가정한다. 즉, 흡연과 음주와의 관계는 마리화나 경험한 그룹과 경험하지 않은 두 그룹에서 모두 동일함을 의미한다.
+
+```{r}
+three_fit1 <- glm(y~alchol+smoking+mari+smoking*mari+ alchol*mari+alchol*smoking, family = poisson, data = three)
+summary(three_fit1)
+```
+두 변수간의 연관관계는 모두 유의하다. 부호를 통해 변수들간의 양의 연관관계를 가짐을 알 수 있다.
+
+* 금연그룹의 마약 미경험 오즈는, 흡연 그룹의 마약 미경험 오즈의 exp(2.847)=17.24배이다.
+
+* 미음주 그룹의 마약 미경험 오즈는, 음주 그룹의 마약 미경험 오즈의 exp(2.986)=19.8063배이다.
+
+* 미음주 그룹의 금연 오즈는, 음주 그룹의 금연 오즈의 exp(2.054)배이다.
+
+### 포화 모형
+```{r}
+three_fit2 <- glm(y~alchol*smoking*mari, data = three, family = poisson)
+summary(three_fit2)
+```
+
+# **과제 **
+```{r}
+shop <- read.csv("./data/intshop.csv", header = T, sep = ",")
+
+fit1 <- glm(shop~income + sat, data = shop, family = poisson)
+summary(fit1)
+pchisq(1450.3-1432.3,2, lower.tail = F)
+1-pchisq(1450.3-1432.3,2)
+```
+income과 sat 모두 유의하다.
+
+income이 한 단위 감소할수록, 온라인 쇼핑 건수가 exp(-0.042123)=0.9587518
+1/exp(-0.042123) = 1.043023배 증가한다.
+
+sat이 한 단위 감소할수록, 온라인 쇼핑 건수가 1/exp(-0.012910)=1.012994배 증가한다.
+
+```{r}
+fit2 <- glm.nb(shop~income+sat, data = shop)
+summary(fit2)
+fit1$aic
+fit2$aic
+pchisq(108.34-107.65, 2, lower.tail = F)
+```
+income, sat 변수 모두 유의하지 않음.
+
+theta
+0.3915/0.0639=6.126761 > 1.96 유의
+
+음이항 회귀모형을 적용하는 것이 맞음
+
+```{r}
+decentric <- read.table("./data/gamma.txt", header = T)
+# 모두 연속형으로 고려한 경우
+
+fit1 <- glm(ca~doseamt*log(doserate)+offset(log(cells)), data = decentric, family = poisson)
+summary(fit1)
+```
+교호작용 유의하다.
+
+```{r}
+# doseamt만 그룹으로 간주한 경우
+decentric$doseamt <- as.factor(decentric$doseamt)
+fit2 <- glm(ca~doseamt*log(doserate)+offset(log(cells)), data = decentric, family = poisson)
+summary(fit2)
+
+fit3 <- glm(ca~doseamt+log(doserate)+offset(log(cells)), data = decentric, family = poisson)
+summary(fit3)
+
+pchisq(42.776-21.75, 2, lower.tail = F)
+
+anova(fit2, fit3)
+```
+
+교호작용 유의
+
+
+# **문구 **
+
+* p-value는 ~이므로 유의수준 0.05하에서 귀무가설을 기각할 수 ~. 따라서 
+
+* ~을 순서형 반응변수로 간주하여 분석한 결과 ~ 변수만이 유의했다. 즉, << 순서일 때, ~이 많을수록 ~ 이다. 
+
+* 영과잉모형 : ~에 대한 무위험 비율은 매우 유의적이다. 즉, ~가 발생하지 않았다면, 그가 무위험 그룹에 속할 가능성은 exp()이다.
+
+* A의 B그룹 오즈는 A'의 B그룹 오즈의 exp()배이다.
+
+

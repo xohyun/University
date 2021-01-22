@@ -1,0 +1,675 @@
+---
+title: "범주형준비"
+output: 
+  html_document : 
+    toc : TRUE
+    theme: united
+    toc_depth : 3
+    toc_float: 
+      collapsed : false
+---
+
+# **Chapter 1. **
+
+## 비율차 / RR / 오즈비
+```{r}
+aspirin <- matrix(c(189, 104, 10845, 10933), ncol = 2)
+rownames(aspirin) <- c("Placebo", "Aspirin")
+colnames(aspirin) <- c("outcome+", "outcome-")
+aspirin
+
+#방법1
+library(epiR)
+epi.2by2(aspirin, method = "cohort.count", conf.level = 0.95)
+```
+
+$H_0 : 위약 그룹과 아스피린 그룹이 동일한 치유율을 가진다.$
+$H_1 : 위약 그룹과 아스피린 그룹이 동일한 치유율을 가지지 않는다.$
+
+상대위험도(RR)의 신뢰구간이 (1.43, 2.31)으로 1을 포함하지 않으므로 귀무가설을 기각한다.
+
+오즈비(OR)의 신뢰구간이 (1.44, 2.33)으로 1을 포함하지 않으므로 귀무가설을 기각한다.
+
+비율차는 신뢰구간에 100을 곱해서 (0.47, 1.07)으로 0을 포함하지 않으므로 귀무가설을 기각한다.
+
+OR가 1.83이므로 위약 그룹의 오즈 값은 아스피린 그룹의 오즈 값의 1.83배로 위약그룹이 83% 만큼 더 높은 오즈 값을 가지는 것을 알 수 있다.
+
+RR이 1.82이므로 위약 그룹이 아스피린 그룹의 심금경색 발병률보다 82% 더 높다.
+
+따라서 두 그룹은 동일한 치유율을 가지지 않는다.
+
+
+```{r}
+#방법2
+x = c(189, 104)
+n = c(11034, 11037)
+prop.test(x, n, alt = "two.sided")
+```
+p-value가 7.71e-07이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+따라서 두 그룹은 동일한 치유율을 가지지 않는다.
+
+```{r}
+#방법3
+library(mosaic)
+x = matrix(c(189, 104, 10845, 10933), ncol = 2)
+y = rbind(x[2,], x[1,]) ### 여기서는 행을 바꿔주어야 한다.
+oddsRatio(y, conf.level = 0.95, verbose = TRUE)
+```
+
+
+
+## 첫 연습문제
+```{r}
+#1.
+prop.test(x = 65, n = 220, p = 0.3, alt = "two.sided")
+prop.test(x = 65, n = 220, p = 0.3, alt = "less")
+
+#2.
+advertise <- c(40,37,53)
+pr <- c(0.3,0.2,0.5)
+qq <- chisq.test(advertise, p = pr)
+qq$expected
+# p-value가 0.03183이므로 귀무가설을 기각한다. 
+# TV의 영향력이 예상으로는 26이었지만, 37명으로 더 많았으며, 
+# 인터넷 광고는 그들의 주장에 의하여 65명으로 예상했으나 실제는 53명으로 더 적었다.
+
+#3.
+library(epiR)
+new <- matrix(c(78,150,401,522), ncol = 2)
+colnames(new) <- c("Yes", "No")
+rownames(new) <- c("새롭게 개발된 약품", "기존 약품")
+epi.2by2(new, method = "cohort.count", conf.level = 0.95)
+# 비율차는 -0.1060, -0.0147으로 0을 포함하고 있지 않으므로 같다고 볼 수 없다.
+# 상대 비율은 0.57, 0.93으로 1을 포함하고 있지 않으므로 같다고 볼 수 없다. 
+# 오즈비는 0.68이고 신뢰구간이 1을 포함하고 있지 않으므로 같다고 볼 수 없다.
+```
+
+
+
+# **Chapter 2. 분할표**
+
+## 음료 제조회사
+```{r}
+res <- rep(c("Fav", "soso"), times = 2)
+country <- rep(c("미국", "영국"), each = 2)
+count <-c (29,6,19,15)
+drink <- xtabs(count~country + res)
+drink
+summary(drink)
+```
+$H_0 : 국가와 음료수의 선호도가 독립적이다.$
+$H_1 : 국가와 음료수의 선호도가 독립적이지 않다.$
+
+p-value가 0.01491로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+따라서 국가와 신제품의 선호도에 연관관계가 존재함을 알 수 있다.
+
+자료를 좀 더 자세히 살펴보면, 미국에서 제품의 선호도는 29/35=0.829인데 반하여, 영국의 선호도는 19/34=0.558임을 알 수 있다. 따라서 미국에서 이 음료수가 더 선호되는 것을 알 수 있다.
+
+### $\mu$값 (chisq.test)
+```{r}
+qq <- chisq.test(drink, correct = F)
+qq$expected
+sum((drink-qq$expected)^2/qq$expected) # 카이제곱 값.
+```
+
+$\mu$값을 해석해보면, 미국은 선호하는 경향이 많고, 영국에서는 선호하지 않는 경향이 많다.
+
+## 소표본 검정 (fisher.test)
+```{r}
+# 전염병 완치 예제
+x <- rep(c("trt", "place"), times = 2)
+res <- rep(c("cure", "uncure"), each = 2)
+count <- c(10,2,2,4)
+infec <- xtabs(count~x+res)
+infec
+summary(infec)
+
+fisher.test(infec)
+```
+$H_0$ : 치료법과 치유여부는 독립이다.
+$H_1$ : 치료법은 치유여부에 영향을 주지 않는다.
+
+p-value가 0.03389이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+따라서 치료법과 치유여부는 독립이 아니라고 이야기할 수 있다.
+
+## McNemar
+```{r}
+x <- matrix(c(20,10,5,10), ncol = 2)
+colnames(x) <- c("왼쪽시력저하있음","왼쪽시력저하없음")
+rownames(x) <- c("오른쪽시력저하있음", "오른쪽시력저하없음")
+x
+mcnemar.test(x)
+mcnemar.test(x, correct = F)
+```
+$H_0$ : 오른쪽눈과 왼쪽눈의 시력 저하에는 차이가 없다.
+
+$H_1$ : 오른쪽눈과 왼쪽눈의 시력 저하에는 차이가 있다.
+
+p-value가 0.3017/0.1967이므로 유의수준 0.05하에서 귀무가설을 기각할 수 없다.
+
+따라서 오른쪽눈과 왼쪽눈의 시력 저하에는 차이가 없다.
+
+## McNemar - exact test
+```{r}
+x <- matrix(c(21,9,2,12),2,2)
+x
+mcnemar.test(x)
+mcnemar.test(x, correct = F)
+library(exact2x2)
+mcnemar.exact(x)
+```
+$H_0$ : 부부간 부동산 정책에 대한 찬성 여부에는 차이가 없다.
+
+$H_1$ : 부부간 부동산 정책에 대한 찬성 여부에는 차이가 있다.
+
+p-value가 연속성 수정을 했을 경우에는 0.07044로 유의수준 0.05하에서 귀무가설을 기각할 수 없고, 연속성 수정을 안 했을 경우에는 0.03481로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 
+
+이러한 이유는 한 셀이 2로 작기 때문이다. 따라서 exact test를 진행한다.
+
+p-value가 0.06543으로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 부부간 부동산 정책에 대한 찬성 여부에는 차이가 없는 것으로 볼 수 있다.
+
+
+## 2x2xK 분할표
+```{r}
+# 호흡기 질환 임상 연구
+resp <- array(c(29,14,16,31,37,24,8,21), dim = c(2,2,2)
+              , dimnames = list(treat=c("test","placebo"),Response=c("yes","no"),
+                                center = c("1","2")))
+resp
+mantelhaen.test(resp,correct = F)
+```
+$H_0$ : 치유 여부와 증세 완화 정도는 독립이다.
+
+$H_1$ : 치유 여부와 증세 완화 정도는 독립이 아니다.
+
+p-value가 1.781e-05이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+따라서 치유 여부와 증세 완화 정도는 독립이 아니라고 할 수 있다. 차이가 있다고 볼 수 있다.
+
+```{r}
+#개별분석
+g1 <- resp[,,1]
+chisq.test(g1, correct = F)
+g2 <- resp[,,2]
+chisq.test(g2, correct = F)
+```
+center1에서는, p-value가 0.001549이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 center1에서는 치유 여부와 증세 완화 정도는 독립이 아니라고 볼 수 있다.
+
+center2에서는, p-value가 0.003365이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 center2에서는 치유 여부와 증세 완화 정도는 독립이 아니라고 볼 수 있다.
+
+```{r}
+#층간의 오즈비 동일성 검정
+library(vcd)
+woolf_test(resp)
+```
+$H_0$ : 층간에 동일한 오즈비를 가진다.
+
+$H_1$ : 층간에 동일한 오즈비를 가지지 않는다.
+
+p-value가 0.99로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 층간에 동일한 오즈비를 가지지 않는다. 따라서 위에서 구한 Mantel-Haenszel통계량을 적용할 수 있다. 
+
+```{r}
+# 사형제도의 예제
+resp2 <- array(c(53,11,414,37,0,4,16,139), dim = c(2,2,2), 
+               dimnames = list(offender = c("white", "Black"),
+                               death_penalty = c("yes","no"),
+                               defendent = c("White", "Black")))
+resp2
+woolf_test(resp2)
+
+mantelhaen.test(resp2)
+```
+$H_0$ : 층간에 동일한 오즈비를 가진다.
+
+$H_1$ : 층간에 동일한 오즈비를 가지지 않는다.
+
+p-value가 0.6061로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 층간에 동일한 오즈비를 가지지 않는다. 따라서 Mantel-Haenszel통계량을 적용할 수 있다.
+
+$H_0$ : 원고의 인종을 고려했을 때, 피고의 인종과 사형 선고는 독립이다.
+
+$H_1$ : not $H_0$
+
+mantelhaen.test의 결과를 보면, p-value가 0.02881이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 원고의 인종을 고려했을 때, 피고의 인종과 사형 선고는 독립이 아니라고 할 수 있다. 
+
+```{r}
+chisq.test(resp2[,,1])
+chisq.test(resp2[,,2])
+```
+$H_0$ : 피고의 인종과 사형 선고는 독립이다.
+
+$H_1$ : not $H_0$
+
+원고의 인종이 white일 때, p-value가 0.03719이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+원고의 인종이 black일 때, p-value가 1이므로 유의수준 0.05하에서 귀무가설을 기각할 수 없다.
+교락 변수의 두 수준에서 표본의 크기가 큰 차이가 있어서, 검정 효과에 대하여 다른 영향력을 가지는 것을 알 수 있다.
+
+# **Chpater 3. IxJ 분할표**
+
+## 둘다 명목형
+```{r}
+taxtest <- matrix(c(71,63,56,18,19,32), ncol=2)
+taxtest
+test1 <- chisq.test(taxtest)
+test1
+```
+$H_0$ : 새로운 조세 제도 도입과 직업군은 서로 독립이다.
+
+$H_1$ : not $H_0$
+
+p-value가 0.03622이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 
+따라서 새로운 조세 제도 도입과 직업군은 독립이라고 할 수 있다.
+
+```{r}
+library(vcd)
+assocstats(taxtest)
+```
+Likelihood Ratio의 p-value가 0.038878이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 새로운 조세 제도 도입과 직업군은 독립이라고 할 수 있다.
+
+```{r}
+test1$residuals
+# 분할표를 만드는 또 다른 방법
+job <- rep(c("A","B","C"), each = 2)
+resp <- rep(c("agree","disagree"), times = 3)
+count<- c(71,18,63,19,56,32)
+vote <- xtabs(count~job + resp)
+vote
+par(mfrow=c(1,2))
+barplot(vote)
+barplot(t(vote))
+prop.table(vote, margin = 2)
+prop.table(vote, margin = 1)
+```
+1) 찬성 비율이 가장 높은 직업군은 A이며 반대 비율이 가장 높은 직업군은 C이다.
+2) A,B,C 모두 찬성의 비율이 높다. 하지만 그 비율이 같지 않다.
+
+
+## 한 변수만 순서형
+```{r}
+imporv <- factor(rep(c("None","Some","Marked"), times = 2), 
+                 levels = c("None","Some","Marked"), ordered = TRUE)
+treatment <- rep(c("Test","Placebo"), each = 3)
+count <- c(13,7,21,29,7,7)
+arthritis <- xtabs(count~treatment + imporv)
+arthritis
+prop.table(arthritis, margin = 1)
+
+library(coin)
+ct <- chisq_test(arthritis, scores = list("imporv" = c(1,2,3)))
+n = sum(arthritis)
+ct
+statistic(ct)^2*(n-1)/n
+```
+$H_0$ : 두 그룹 간에 증상 완화 정도에는 차이가 없다.
+
+$H_1$ : 한 그룹이 다른 그룹보다 더 나은 증상 완화를 보여준다.
+
+각 그룹에서, 한 개 이상의 cutpoint(j=2,..,(J-1))에 대해 1부터 j까지 범주의 합이 5이상이고 또한 j+1부터 J까지 범주의 합이 5이상일 때 적용될 수 있다.
+
+p-value가 0.0003092이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+[prop.table]
+
+placebo 그룹은 None에서 가장 높은 비율을 가진 반면에 Test group은 Marked에서 가장 큰 비율을 가진다. 즉, 두 그룹은 서로 다른 반응 패턴을 보인다.
+
+```{r}
+#세정력 자료
+treatment <- rep(c("A","B","C"), each = 3)
+washing <- factor(rep(c("Low", "Medium", "High"), times = 3),
+                  levels = c("Low", "Medium", "High"), ordered = TRUE)
+count <- c(27,14,5,10,17,26,5,12,50)
+wash <- xtabs(count~treatment + washing)
+wash
+library(coin)
+ct <- chisq_test(wash, scores = list("washing" = c(1,2,3)))
+ct
+```
+$H_0$ : treatment와 washing은 독립이다.
+
+$H_1$ : not $H_0$
+
+p-value가 2.95e-12이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+## 둘 다 순서형
+```{r}
+treatment <- rep(factor(c("Water","Standard","Super"),levels = c("Water","Standard","Super"),
+                        ordered = TRUE), each = 3)
+wash <- rep(factor(c("Low","Medium","High"),levels = c("Low","Medium","High"),
+                      ordered = TRUE), times = 3)
+count <- c(27,14,5,10,17,26,5,12,50)
+washability <- xtabs(count ~ treatment + wash)
+washability
+# 둘 다 명목형인 것 처럼 해보자. -> 근데 이렇게 하면 안됨.
+res0 <- chisq.test(washability)
+res0
+assocstats(washability)
+```
+$H_0$ : treatment와 washing은 독립이다.
+
+$H_1$ : not $H_0$
+
+p-value가 3.114e-11이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다.
+
+[assocstats]
+
+p-value가 Likelihood Ratio, Pearson 모두에서 유의하다.
+
+```{r}
+# 두 변수 모두 순서형일 경우를 생각해보자.
+library(coin)
+res2 <- lbl_test(washability, scores = list("treatment" = c(1,2,3), "wash" = c(1,3,5)))
+res2                 
+n = sum(washability)
+statistic(res2)^2*(n-1)/n
+```
+$H_0$ : treatment와 washing은 독립이다.
+
+$H_1$ : not $H_0$
+
+$Q_{cs}$는 50.29676의 값이고, p-value는 1.132e-12로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. Z값이 7.1135로 양수이므로 세제가 비쌀수록 세정력이 뛰어남을 알 수 있다. 
+
+## IxJxK 분할표
+```{r}
+# x, y 모두 순서형인 경우
+jobsatisfaction
+```
+
+```{r}
+# 수입과 직업 만족도 모두를 명목형으로 간주 -> 멘텔 헨젤 검정
+mantelhaen.test(jobsatisfaction)
+```
+$H_0$ : 수입과 직업 만족도는 독립이다.
+
+$H_1$ : not $H_0$
+
+p-value가 0.3345이므로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 성별을 고려한 상태에서 수입과 직업 만족도는 연관관계가 없다.
+
+```{r}
+# 직업 만족도만을 순서변수로 간주
+cmh_test(jobsatisfaction, scores = list("Job.Satisfaction" = c(1,3,4,5)))
+```
+$H_0$ : 수입 그룹간의 직업 만족도에는 차이가 없다.
+
+$H_1$ : not $H_0$
+
+p-value가 0.02884이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 성별을 고려한 상태에서 수입과 직업 만족도는 연관관계가 있다. 만족도의 순서를 반영한 결과 수입 그룹간 정도에 따라 만족도에 차이가 존재함을 알 수 있다.
+
+```{r}
+# 수입과 직업 만족도 모두 순서형
+lt <- lbl_test(jobsatisfaction, scores = list("Job.Satisfaction" = c(1,3,4,5), 
+                                              "Income" = c(3, 10, 20, 35)))
+lt
+```
+$H_0$ : 수입과 직업 만족도는 독립이다.
+
+$H_1$ : not $H_0$
+
+p-value가 0.01309이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. z가 2.4812로 양의 값을 가지므로 성별을 고려한 상태에서 두 변수는 양의 상관관계를 가진다. 따라서 수입이 높을수록 만족도는 높아진다.
+
+```{r}
+# 남녀별 검정 실시
+lt1 <- lbl_test(jobsatisfaction[,,1], scores = list("Job.Satisfaction" = c(1,3,4,5), 
+                                              "Income" = c(3, 10, 20, 35)))
+lt1
+```
+$H_0$ : 수입과 직업 만족도는 독립이다.
+
+$H_1$ : not $H_0$
+
+성별이 Female인 경우, p-value가 0.2037으로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 수입과 직업 만족도는 연관관계가 없다고 볼 수 있다.
+
+```{r}
+lt2 <- lbl_test(jobsatisfaction[,,2], scores = list("Job.Satisfaction" = c(1,3,4,5), 
+                                                    "Income" = c(3, 10, 20, 35)))
+lt2
+```
+$H_0$ : 수입과 직업 만족도는 독립이다.
+
+$H_1$ : not $H_0$
+
+성별이 Male인 경우, p-value가 0.0205로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 수입과 직업 만족도는 연관관계가 있다고 볼 수 있다. z의 값이 2.3171로 양수이므로 수입과 직업만족도는 양의 상관관계를 가진다고 볼 수 있다. 따라서 남자의 경우 수입이 높을수록 만족도는 높아진다고 볼 수 있다. 
+
+[결과]
+
+이 결과를 통해, Mantel-Haenszel 통계량을 적용하는 것보다 성별 별로 따로 분석 결과를 정리하는 것이 더 바람직해 보인다. 만약, 성별 모두 유의하고 부호가 같다면 Mantel-Haenszel 통계량이 사용될 수 있다.
+
+## 연관성 측도
+```{r}
+library(DescTools)
+KendallTauB(washability, conf.level = 0.95)
+GoodmanKruskalGamma(washability, conf.level = 0.95)
+```
+* 추가예정
+
+## Sparse data
+```{r}
+# 모두 명목형
+car <- matrix(c(4,0,5,0,3,5,0,3,2,2,4,2), ncol = 4)
+fisher.test(car)
+```
+$H_0$ : 차 종류와 취득 매체는 독립이다.
+
+$H_1$ : not $H_0$
+
+p-value가 0.04734이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 차 종류와 취득 매체는 연관관계가 있다고 할 수 있다. 즉, 차종에 따라 서로 다른 광고 매체를 통해 정보를 알게 되었다.
+
+
+# **Chapter 4. GLM**
+
+### o-ring
+```{r}
+library(faraway)
+data(orings)
+head(orings)
+fit<-glm(cbind(damage,6-damage)~temp, data = orings, family = binomial)
+summary(fit)
+```
+p/(1-p) = 11.66299 - 0.21623 temp
+
+temp가 1화씨 증가할 때마다 오즈가 exp(-0.21623)=0.80555배 증가한다.
+
+즉, temo가 1화씨 감소할 때마다 오즈가 1/0.80555 = 1.241388배 증가한다.
+
+[정확]
+
+온도가 화씨 1도 올라갈 때마다 O-ring이 손상될 오즈는 exp(-0.2162)=0.8062배이다.
+
+화씨 1도 내려갈 때마다 O-ring이 손상될 오즈는 1/0.8062=1.2413으로 24% 증가한다.
+
+```{r}
+fit2 <- glm(cbind(damage, 6-damage)~temp, data = orings, family = binomial(link = "probit"))
+summary(fit2)
+pnorm(5.59145-0.1058*45) #온도가 45일 경우 
+```
+
+
+### 살충제
+```{r}
+data(bliss)
+bliss
+insec <- glm(cbind(dead, alive)~conc, data = bliss, family = binomial)
+summary(insec)
+```
+살충제 농도가 높아질수록, 해충이 죽을 오즈는 exp(1.1619)=3.196배이다.
+
+[정확]
+
+용량이 1만큼 증가할 때, 해충이 죽을 오즈는 exp(1.1619)=3.196배 증가한다.
+
+### 코골이 (확인요망)
+```{r}
+snoring <- c(0,2,4,5)
+disease <- c(24,35,21,30)
+total <- c(1379,638,213,254)
+glmdata <- data.frame(snoring, disease, total)
+glmdata
+glm(cbind(disease, total - disease)~snoring, data = glmdata, family = binomial)
+```
+코골이 단계가 1만큼 증가할 때, 심장질환 질병에 걸릴 오즈가 exp(0.3973)=1.487802배 증가한다.
+
+## Null / Residual
+```{r}
+fit
+1-pchisq(38.9,22)
+```
+D=38.9이고 자유도는 23-1=22이 된다. p-value = 1-pchisq(38.9,22)=0.0144964로 귀무가설을 기각한다. 축소된 deviance는 너무 커서 적절한 모형이라고 할 수 없다.
+
+```{r}
+1-pchisq(16.91,21)
+```
+D=16.91이고 자유도는 23-2=22이 된다. p-value = 1-pchisq(16.91,21)=0.7165473로 귀무가설을 기각할 수 없다. 즉, 축소되 ㄴ모형은 원 모형의 적합도와 유의적인 차이가 없었다. 
+
+```{r}
+1-pchisq(21.99,1)
+```
+38.9-16.91=21.99
+
+$H_0 : \beta_1 = 0$
+
+$H_1 : not H_0$
+
+p-value가 2.740747e-06이므로 유의수준 0.05하에서 귀무가설을 기각할 수 있다. 따라서 축소된 모형은 적합하지 못하다.
+
+## 적합도 검정
+```{r}
+res <- residuals(fit, type = "pearson")^2
+pears <- sum(res)
+1-pchisq(pears, df = 21)
+```
+$H_0$ : 지금 고려하고 있는 모형은 적합하다.
+
+$H_1 : not H_0$
+
+p-value가 0.1382507로 유의수준 0.05하에서 귀무가설을 기각할 수 없다. 따라서 피어슨 카이제곱 통계량에 의하면 fit모형은 적합한 모형이다.
+
+### 저체중아이
+```{r}
+library(MASS)
+data(birthwt)
+head(birthwt)
+bb <- birthwt[,-10]
+head(bb)
+racef <- factor(bb$race, labels = c("white","black","other"))
+bb$race <- racef
+table(bb$race)
+table(racef)
+result1 <- glm(low~., data = bb, family = binomial)
+summary(result1)
+```
+lwt, raceblack, raceother, smoke, ht변수가 유의수준 0.05하에서 신생아의 저체중 출산(<2.5kg)에 유의한 영향을 준다.
+
+양의 부호는 반응변수 low=1의 오즈를 증가시킴을 의미
+음의 부호는 반응변수 low=1의 오즈를 감소시킴을 의미
+
+lwt : 엄마의 체중이 1lb 늘어날수록, 신생아가 저체중일 오즈가 exp(-00.015424)=0.9846943배이다. 엄마의 체중이 1lb감소할 수록 태아가 저체중일 오즈는 1/0.9846943=1.015544배 증가한다. 즉, 1.5% 증가한다.
+
+raceblack : white 인종에 비해 black 인종이 저체중 신생아를 출산할 오즈가 exp(1.272260)=3.568909배 증가한다. 또한 white 인종에 비해 other 인종이 저체중 신생아를 출산할 오즈가 exp(0.880496)=2.412096배 증가한다.
+
+smoke : 흡연 산모가 저체중 신생아를 출산할 오즈는 비흡연 산모에 비해 exp(0.938846)=2.557029배 증가한다.
+
+ht : 고혈압 산모가 저체중 신생아를 출산할 오즈는 비고혈압 산모에 비해 exp(1.863303) = 6.4444989배 증가한다.
+
+```{r}
+result1$coef
+exp(result1$coef)
+1-pchisq(201.28, 179)
+1-pchisq(234.67-201.28, 188-179)
+```
+$H_0 : \beta_1 = ... = \beta9 = 0$
+
+p-value가 0.0001141987이므로 유의수준 0.05하에서 귀무가설을 기각한다.
+따라서 9개 중 하나는 0이 아니다.
+
+## 오즈 신뢰구간
+```{r}
+summary(result1)
+coef1 <- summary(result1)$coef[,1]
+se1 <- summary(result1)$coef[,2]
+
+lower.ci <- exp(coef1-1.96*se1)
+upper.ci <- exp(coef1+1.96*se1)
+
+cbind(exp(coef1), lower.ci, upper.ci)
+```
+**신뢰구간이 1을 포함한다는 것은 변수가 유의하지 못함을 의미한다.**
+
+## step
+```{r}
+step(result1)
+```
+최종모형 : low ~ lwt + race + smoke + ptl + ht + ui
+
+# **ROC / AUC**
+## 1예제
+```{r}
+library(PresenceAbsence)
+library(ggplot2)
+obs <- result1$y
+n = length(obs)
+df <- data.frame(ID=1:n, observed = result1$y, predicted = fitted(result1))
+auc.roc.plot(df, color = TRUE)
+```
+
+## 2예제
+```{r}
+model1 <- glm(low~lwt+race+smoke+ht+ui, family = binomial, data = bb)
+model2 <- glm(low~lwt+race+smoke+ht, family = binomial, data = bb)
+library(pROC)
+roc(bb$low, model1$fitted.values, plot=TRUE, col = "red")
+roc(bb$low, model2$fitted.values, plot=TRUE, col = "blue", add = TRUE)
+legend(0.4,0.2,lty = c(1,2), legend = c("model1","model2"), col = c("red","blue"))
+```
+
+# **Writing**
+## 2x2
+***
+***
+> 귀무가설 : ~와 ~은 서로 독립한다
+
+> 카이제곱 검정 통계량을 이용해 ~~와 ~~간의 자료의 독립성 여부를 검정하였다. 
+> **검정 결과 p-value는 ~으로 유의수준 0.05 하에서 귀무가설을 기각 ~하다. 따라서 ~와 ~은 서로 독립한다고 말할 수 없다.**
+
+> 표본의 크기가 작기 때문에 (Mij < 5 인 셀 존재) fisher's exact test를 시행한다. 
+
+> 층 : 각 단과대학 별 가설은 아래와 같다.
+
+> 귀무가설 : ~에서, ~에 따른 ~은 연관성이 없다.
+
+***
+***
+### woolf test
+> 귀무가설 : 층간의 동일한 오즈비를 가진다.
+
+> 만약 유의한 결과가 나오면 Mantel-Haenszel 검정 통계량을 적용할 수 없다.
+
+> Mantel-Haenszel 검정 통계량을 사용하기 전, 우선 woolf 검정을 통하여 층간의 ~과 ~의 연관성 정도가 동일한지 확인해야 한다. Woolf 검정 시행 결과, p-value는 ~으로 유의수준 0.05하에서 귀무가설을 기각 ~하다. 따라서 층 간의 ~과 ~의 연관성 정도가 동일 하지 ~음을 의미하며, Mantel-Haenszel 검정을 실시하기엔 부적절하다고 판단된다.
+
+### mantel
+> 귀무가설 : ~과 ~은 독립이다.
+
+> Mantel-Haenszel 검정 결과, p-value는 ~으로 ~과 ~은 서로 독립함을 알 수 있다. 
+
+> 하지만 woolf 검정 결과를 근거로 이 검정은 적절한 분석 방법이 아닌 것으로 판단된다. woolf 검정을 통해, ~ 간의 연관성 정도가 동일하다고 볼 수 없기 때문이다.
+
+> 실제로 각 층 내에서 독립성 검정을 따로 실시하였을 때는 ~이 서로 독립하지 않다는 결과가 나왔다.
+
+***
+***
+
+### 하나 순서형
+> 귀무가설 : 명목형 변수에 따른 순서형 변수의 정도에는 차이가 없다.
+
+> ~은 순서형 변수이므로, Linear by Linear 검정을 실시하였다. 
+
+### 둘 다 순서형
+> 귀무가설 : ㅇ므주 정도와 운동 정도는 연관성이 없다.
+
+> 검정 결과, p-value는 ~으로 유의수준 0.05하에서 귀무가설을 기각 ~할 수 있다.
+
+> z=~ < 0으로 ~와 ~는 음의 관계가 있다고 할 수 있다.
+
+> 다음으로, Kendall's Tau B 통계량과 Gamma 통계량을 이용하여 두 순서형 변수 간의 연관 정도를 추정하였다. kendall's Tau B = ~, Gamma = ~이다. 두 통계량 모두 95% 신뢰도 구간이 0을 포함하지 않으므로 유의수준 0.05에서 유의한 '음'의 관계가 있음을 알 수 있다. 이를 근거로, ~가 낮을수록 ~가 높아지는 경향이 있다고 할 수 있다.
+
