@@ -1,0 +1,313 @@
+---
+title: "Datamining-HW4"
+author : "01조"
+date : "2020.11.10"
+output:
+  html_document:
+    theme: cosmo
+    highlight: textmate
+---
+
+## library load
+```{r library}
+# library load
+library(ISLR)
+library(tree)
+library(glmnet)
+library(dbplyr)
+library(ggplot2)
+```
+
+
+## [ISLR 연습문제]
+
+### 8.9 
+
+    * [f] **수정**. 교차검증(cross-validation)은 5-fold로, 하드코딩으로 구현하라. 다시 말하여 `cv.tree()` 사용하지 마세요.
+
+#### [a] train set - 800 obs & test set - remaining obs
+
+```{r}
+data(OJ)
+set.seed(1)
+ind<-sample(1:nrow(OJ),size=nrow(OJ))
+ind.tr<-ind[1:800]
+
+train <- OJ[ind.tr,]
+test <- OJ[-ind.tr,]
+```
+
+#### [b] train - fit a tree, y=Purchase
+```{r}
+fit.tree = tree(Purchase~., data=train)
+summary(fit.tree)
+
+```
+    * 재귀적 이진분할에 의해 처음 쓰인 변수는 LoyalCH이다. 반응변수를 제외 총 17개의 변수 중 5개의 변수("LoyalCH","PriceDiff","SpecialCH","ListPriceDiff","PctDiscMM")들이 의사결정나무 모형에 사용되었다.
+      What is the training error rate? 0.1588(15.88%)
+      How many terminal nodes does the tree have? 9 
+
+#### [c]
+```{r}
+fit.tree
+```
+    * 8번째 terminal node를 예로 들어보자. LoyalCH가 0.5036을 기준으로 처음 분기가 결정된다.
+    그 다음으로 LoyalCH가 0.280875보다 작은 기준으로 분기가 다시 나뉘고, 그 후에 LoyalCH < 0.0356415에 속하는 지점이 8번째 terminal node에 해당한다. 여기서의 관측치는 59개, deviance는 10.14, Purchase가 MM으로 예측된다.CH의 개수와 MM개수의 비율은 0.01695:0.98305이다.
+
+#### [d]
+```{r}
+plot(fit.tree)
+text(fit.tree, pretty = 0)
+
+```
+
+    * root node는 LoyalCH< 0.5036의 기준으로 나뉘고 Purchase의 LoyalCH가 0.280875보다 작은 값은 "MM"으로 분류되며, 큰 값은 PriceDiff를 기준으로 분류된다. 이러한 과정을 통해(다시말해, LoyalCH, PriceDiff, ListPriceDiff, PctDiscMM, specialCH 이 변수들에 의해) terminal node가 정해진다. terminal node에 의해 나뉜 영역은 총 9개이다. tree모형을 적합시키기 위해 제일 많이 사용된 설명변수는 LoyalCH라는 것을 알 수 있었다. 따라서 가장 중요한 지표는 LoyalCH이다. 
+    
+    
+#### [e] Predict the response on the test data
+```{r}
+set.seed(1)
+yhat = predict(fit.tree, test, type = "class")
+tbl = table(yhat, test$Purchase); tbl
+test.error <- (tbl[1,2]+tbl[2,1])/nrow(test)
+cat("\ntest error = ", test.error,"%")
+```
+    * What is the test error rate? 0.1703704(17.03%)
+
+#### [f] determine the optimal tree size.
+```{r}
+
+K = 5
+store.e = numeric(K) #오분류율 저장
+tree.size = numeric(K)
+
+cv5.tree <- function() {
+  for (k in 1:K) {
+    set.seed(k*1004)
+    n = nrow(train)
+    ind.shf = sample(1:n, size = n)
+    
+    ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+    ind.tr = setdiff(1:n, ind.val)
+    df.tr = train[ind.tr,]
+    df.val = train[ind.val,]
+    
+    cv.fit = tree(Purchase~., data = df.tr)
+    cv.pred = predict(cv.fit, df.val, type = "class")
+    
+    tbl <- table(cv.pred, df.val$Purchase)
+    
+    store.e[k] = (tbl[2] + tbl[3]) / nrow(df.val)
+    tree.size[k] = summary(cv.fit)$size
+}
+  store = cbind(tree.size, store.e)
+  return(store)
+}
+store = cv5.tree()
+
+minerror <- store[which.min(store[,2]),][1]
+```
+
+
+#### [g] x : tree size & y : 5-fold 분류오류율
+```{r}
+store = store[order(store[,1], store[,2]),]
+plot(store[,1], store[,2], type = "b")
+```
+
+#### [h]
+```{r}
+cat("\n최적의 tree size = ", minerror)
+```
+
+#### [i] pruned tree
+```{r}
+fit <- tree(Purchase~., data = train)
+
+fit.total1 <- prune.tree(fit, best=10) #best is bigger than tree size
+summary(fit.total1)
+
+fit.total2 <- prune.tree(fit, best=5)
+summary(fit.total2)
+```
+    * 교차검증오류를 이용한 최적의 model이 pruned tree를 선택하지 않았으므로 terminal node가 5개인 tree 강제로 만듦.
+
+#### [j] Compare the training error rates between the pruned and unpruned trees. Which is higher?
+```{r}
+summary(fit.tree)
+summary(fit.total2)
+```
+    * unpruned tree의 training error는 0.1588((b)에서 적합)이고 pruned tree의 training error는 0.205이다.  
+      pruned tree의 훈련오류율이 더 높다.
+
+#### [k] Compare the test error rates between the pruned and unpruned trees. Which is higher?
+```{r}
+set.seed(1)
+yhat.test = predict(fit.total2, test, type = "class")
+tbl <- table(yhat.test, test$Purchase)
+test.error.p = (tbl[2]+tbl[3])/nrow(test)
+
+test.error.p # pruned tree test error
+test.error # unpruned tree test error
+
+```
+    * unpruned tree : test error = 0.1703704
+      pruned tree : test error = 0.1962963
+
+      pruned tree의 테스트오류율이 더 높다.
+
+---
+## [추가문제] 
+
+### 6.A (#6.10 변형. 영문 표현은 책을 참조하라.) 
+    * 일반적으로 모형에 편입된 변수의 수가 늘어나면 훈련 오류(training error)는 감소하나, 테스트 오류(test error)는 그렇지 않다. Simulation dataset을 생성하여 이 현상을 살펴 보자.  
+
+#### [a] dataset
+
+```{r}
+expit = function(t) return(exp(t) / (1 + exp(t)))
+n = 1000
+
+set.seed(1110)
+X <- matrix(rnorm(1000*20),1000,20)
+
+beta.true = c(0,-10,0,0,20,-30,0,10,20,0,20,10,-10,0,0,0,10,0,-10,0,0)
+
+Xmat = cbind(1,X)
+x_theta = Xmat %*% beta.true
+y = rbinom(n=n, size=1, prob=expit(x_theta))
+
+df = data.frame(y,X)
+
+```
+
+#### [b] 100tr:900te
+```{r}
+n = nrow(df)
+n.train = floor(n*0.1); n.test = floor(n*0.9)
+
+set.seed(1)
+ind = sample.int(n)
+ind.train = ind[1:n.train]
+ind.test = ind[(n.train+1):(n.train+n.test)]
+
+df.tr = as.matrix(df[ind.train,])
+df.te = as.matrix(df[ind.test,])
+x.tr = df.tr[,2:21]
+y.tr = df.tr[,1]
+x.te = df.te[,2:21]
+y.te = df.te[,1]
+```
+
+#### [c] 훈련세트를 대상으로 (라쏘 이진 로지스틱 회귀분석)**을  $\lambda=2^{50}, 2^{49}, \ldots,  2^{-48}, 2^{-49}$에 대하여 적합하라.   
+```{r}
+grid = 2^seq(from=50, to=-49, by = -1)
+
+lasso.fit = glmnet(x.tr, y.tr, family="binomial", alpha=1, lambda=grid)
+dim(coef(lasso.fit)) # 21 100
+
+#lasso.fit
+
+```
+
+#### [d] 다음을 적절히 시각화하라
+$\lambda$ vs. 적합된 모형계수 $\widehat{\beta}_{\lambda}$의 nonzero 성분 개수 
+(``$\widehat{\beta}_{\lambda}$의 자유도''라 불린다).
+```{r}
+# plot(lasso.fit, xvar="lambda")
+# plot(lasso.fit, xvar="norm")
+
+df <- numeric(length(grid))
+for(i in 1:length(grid)){
+  
+  cof<-coef(lasso.fit)[,i]
+  df[i]<-sum(cof!=0)
+}
+
+plot(log10(grid),df)
+
+```
+
+#### [e] 다음을 적절히 시각화하라
+$\lambda$ vs. 적합된 모형의 훈련세트 오분류율 (training-set misclassification error)
+```{r}
+error <- numeric(length(grid))
+for(i in 1:length(grid)){
+  yhat.lasso <- cbind(1,x.tr) %*% coef(lasso.fit)[,i]
+  yhat <- ifelse(yhat.lasso > 0.5, 1 ,0)
+  
+  tbl<-table(yhat,y.tr)
+  error[i]<-ifelse(tbl[1,1]+tbl[1,2]==100, tbl[1,2]/nrow(x.tr), (tbl[1,2]+tbl[2,1])/nrow(x.tr))
+}
+# tbl[1,1]+tbl[1,2]==100 이면 1by2
+
+plot(log10(grid),error)
+```
+
+#### [f] 다음을 적절히 시각화하라
+$\lambda$ vs. 적합된 모형의 테스트세트 오분류율 (test-set misclassification error).
+```{r}
+test.error<-numeric(length(grid))
+for(i in 1:length(grid)){
+  yhat.lasso<-cbind(1,as.matrix(x.te))%*%coef(lasso.fit)[,i]
+  yhat<-ifelse(yhat.lasso>0.5,1,0)
+  tbl<-table(yhat,y.te)
+  test.error[i]<-ifelse(tbl[1,1]+tbl[1,2]==900,tbl[1,2]/nrow(x.te),(tbl[1,2]+tbl[2,1])/nrow(x.te))}
+
+plot(log10(grid),test.error)
+```
+
+#### [g]  
+
+```{r}
+set.seed(1)
+#test error
+lambda <- grid[which.min(test.error)] #test error가 최소화 되는 lambda
+cof.opt <- coef(lasso.fit)[,which.min(test.error)]
+
+cat("test error가 최소화 되는 lambda =", lambda, "\n그때 test error =", min(test.error), "\n자유도 =", sum(cof.opt!=0))
+
+#test error <-> train error 비교
+df1 <- lasso.fit$df + 1
+dff <- data.frame(lambda = lasso.fit$lambda, df = df1, trainerror = error, testerror = test.error)
+head(dff); tail(dff)
+
+par(mfrow=c(1,2))
+plot(df1, error, type="b", col="red", main="train error")
+plot(df1, test.error, type="b", col="blue", main="test error")
+
+# print(grid[which.min(error)]) #train error가 최소화 되는 lambda
+# cof.tr<-coef(lasso.fit)[,which.min(error)]
+# min(error)
+# sum(cof.tr!=0)
+```
+
+    * test error가 최소화 되는 lambda는 0.001953125이고, 이때 beta hat의 자유도는 21이다. test error와 train error 비교를 위해 전체를 보이기엔 너무 많아, 위아래 6개를 대표적으로 출력하였다. 이 시뮬레이션에서는 train error에서 보면, df가 1일 때보다 df가 21일 때 줄어드는 것을 볼 수 있다. test error에서 보면, df가 1일 때보다 df가 21일 때 줄어드는 것을 볼 수 있다. 그러나 test error가 자유도가 클때 train보다 더 변동성이 있는 것을 볼 수 있다.
+      
+#### [h] 다음을 적절히 시각화하라
+
+```{r}
+result<-numeric(length(grid))
+
+for(i in 1:length(grid)){
+cof<-coef(lasso.fit)[,i]
+result[i]<-sqrt(sum((cof[-1]-beta.true[-1])^2))
+}
+
+plot(log10(grid),result, type="b", col="red", main="lambda vs. beta.hat l_2 추정오차")
+```
+
+#### [i] 
+ [g]에서 찾은 모형의 $\lambda$ 및 자유도와 동일한가? 이 결과가 의미하는 바를 짧게 코멘트하여라. 일반적으로 prediction(새로운 input $x$에 대한 반응변수 예측)을 가장 잘 하는 모형과 estimation($\beta$ 추정)을 가장 잘 하는 모형이 동일하겠는가?  
+
+```{r}
+print(grid[which.min(result)])
+cof.opt<-coef(lasso.fit)[,which.min(result)]
+sum(cof.opt!=0) #자유도
+
+test.error[which.min(error)] # test error가 가장 작은 람다에서의 train error을 찾아봄.
+```
+
+    * (g)에서 찾은 자유도는 같다. 이 모형에서는 test error를 최소화시키는 lambda와 beta 추정을 가장 잘하는 lambda가 다르게 나온 것을 볼 수 있다. 일반적으로는 prediction을 잘하는 모형과 추정계수를 잘 예측하는 모형은 다른 것으로 판단된다. 추정계수를 잘 예측한다는 것은 train set에만 잘 맞게 모형을 만드는 것이고 prediction을 잘하기 위해서는 train data 외의 새로운 error를 받아들여야 하므로 두 모형에는 차이가 있을 수밖에 없다고 생각되기 때문이다.
+    
+    

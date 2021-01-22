@@ -1,0 +1,489 @@
+---
+title: "Datamining-hw1"
+author : "01조"
+date : "2020.9.16"
+output: html_document
+---
+
+## ch2) 1.
+### (a) The sample size n is extremely large, and the number of predictors p is small.
+```{}
+flexible method가 더 잘 동작한다. 
+flexible method는 preditors 수가 많으면, 많은 수의 predictors 중에서 어떤 것이 중요한지, 어떠한 영향을 끼치는지를 파악하기 힘들기 때문에 모형을 이해하기가 힘들고 sample size가 작으면 flexible method는 overfitting의 가능성이 커지게 된다. 따라서 예측 변수의 수가 적고 표본크기가 큰 경우에는 유연한 방법이 적절하다. 
+```
+
+![1-(a)문제에 대한 사진](./data/image1_a.png)
+
+위 그림을 보면, Flexitility가 높아질 수록 해석력이 낮은 것을 볼 수 있다.
+
+### (b) The number of predictors p is extremely large, and the number of observations n is small.
+```{}
+inflexible method가 더 잘 동작한다.
+예측 변수의 수가 매우 클 때 유연한 방법(복잡한모형)을 사용하면 성능이 떨어지고, 표본크기가 작은 경우에도 가지고 있는 데이터에 맞도록 과도하게 학습되어서 과적합이 될 가능성이 있으므로 유연한 방법이 적절하지 못하다. 여기서 과적합은 주어진 데이터에 거의 완벽하게 맞게 적합되어서, test set이 들어올 때에 오차가 증가하는 것을 말한다.
+```
+![1-(b)문제에 대한 사진](./data/image1_b.png)
+
+
+위의 그림을 보면, 구불구불하게 거의 모든 데이터에 맞추어진 모형이 과적합임을 알 수 있다.
+
+### (c) The relationship between the predictors and response is highly non-linear.
+```{}
+flexible method가 더 잘 동작한다.
+예측 변수와 반응 변수 간의 관계가 매우 비선형적이라면 모형이 복잡할 가능성이 크다. flexible한 모형일수록, training set에 더 과하게 적합할 수 있으므로, non-linear관계의 모형일 때 더 적합하다. 
+```
+
+### (d) The variance of the error terms, i.e. σ2 = Var(ε), is extremely high.
+```{}
+inflexible method가 더 잘 동작한다.
+아래 그림에서 볼 때, Var(ε0)가 irreducible 오류에 해당한다. 이 오류는 우리가 정한 가정에 기반한 오류이기 때문에 줄일 수 없어서, 이 값이 굉장히 크다면 reducible error를 아무리 줄이려고 해도 등호 왼쪽의 값이 커지게 된다. 즉, 실제값과 추정값의 차이의 제곱이 큰 것이다. 따라서 추정값이 실제값과 굉장히 차이가 난다는 의미로 매우 큰 noise를 가지고 있다고 볼 수 있다. noise가 많은 데이터에 대하여 flexible한 모형을 적용하게 되면, 너무 과도하게 적합할 수 있는 경향이 있어서 inflexible한 모형이 적절하다. 
+```
+
+![1-(d)문제에 대한 사진](./data/image1_d.png)
+
+
+
+## ch2) 3. 
+### (a)
+![3_a번 문제에 대한 사진](./data/image3_a.png)
+
+### (b)
+![3_b번 문제에 대한 사진](./data/image3_b.jpg)
+
+
+## ch2) 7. 
+### 수식으로 확인한 후, R로도 확인했습니다!
+
+지도학습 중 분류 문제에 사용하는 알고리즘
+
+- k-NN 알고리즘
+
++ 새로운 데이터(x)가 '어떤그룹'의 데이터와 '가장' 가까우니 x는 '어떤그룹'이다. 라고 분류하는 알고리즘! 
+
++ k의 역할은 몇 번째로 가까운 데이터까지 살펴볼 것인가를 정한 숫자!
+
++ k-NN에서 가깝다는 개념은 유클리드 거리로 정의!
+
+
+### (a) 각 관측치와 test point 사이의 유클리드 거리를 계산
+$$ P=(X1,X2,X3), Q=(0,0,0) $$
+$$ d(p,q)=d(q,p)=\sqrt\sum(q_i-p_i)^2 $$
+![7_a번 문제에 대한 사진](./data/image7_a.jpg)
+
+```{r} 
+eg7 <- data.frame(X1 = c(0, 2, 0, 0, -1, 1), X2 = c(3, 0, 1, 1, 0, 1), 
+                  X3 = c(0, 0, 3, 2, 1, 1), Y = c('Red', 'Red', 'Red', 'Green', 'Green', 'Red'))
+Q <- c(0, 0, 0)
+eg7$d <- sqrt((eg7$X1 - Q[1])^2 + (eg7$X2 - Q[2])^2 + (eg7$X3 - Q[3])^2)
+eg7
+```
+
+### (b) k=1일때 예측과 이유
+
+![7_b번 문제에 대한 사진](./data/image7_b.jpg)
+
+- k=1 이라면, 유클리드 거리가 (1번째로 가까운) d=1.414214로 test point와 가장 가까운 5번 관측치가 Green그룹이므로 우리의 예측은 Green이다.
+```{r}
+min(eg7$d)
+eg7$Y[eg7$d==min(eg7$d)]
+``` 
+### (c) k=3일때 예측과 이유
+![7_c번 문제에 대한 사진](./data/image7_c.jpg)
+
+- k=3 이라면, 유클리드 거리가 (3번째로 가까운) d=1.41, d=1.71, d=2.00까지 보고 신규 데이터를 분류한다. 이때 각 관측치가 속해있는 그룹이 다르면 다수결의 원칙에 따른다. 여기서는 test point와 가장 가까운 거리에 있는 3개 중 하나가 Green그룹이고 두개가 Red그룹이므로 우리의 예측은 Red이다. 
+```{r}
+sort(eg7$d)[1:3]
+```
+
+### (d) 베이즈결정경계가 매우 비선형적이라면 k에 대한 값이 어떤지 예상 가능? why?
+
+```{}
+베이즈 결정 경계가 매우 비선형적이라면 k값은 작을 것으로 예상된다. 왜냐하면 베이즈 결정 경계가 highly non-linear라는 것은 flexible할 것이고 즉, 평활도(smoothness)가 낮다는 의미이다.  
+
+예를 들어, 아래 그림처럼, 극단적으로 k의 값이 1일 때와 100일 때를 비교해보자. k = 1일 때, 그 점의 가장 가까운 한 개의 점만을 참조하므로 조금 움직일 때마다 참조하는 점이 바뀌게 된다. 즉 평활도가 낮아진다. 따라서 비선형적인 경계를 설명할 때 좋다. 반대로 k = 100일 때, 참조하는 점은 주변의 100개의 점으로, 움직여도 100개의 점이 그렇게 많이 변화하지 않아 평활도가 매우 높다. 따라서 k가 크면 결정 경계가 선형적인 모습을 보이고, k가 작으면 결정 경계가 유연한 비선형적인 모습을 보인다. 
+
+따라서 베이즈 결정 경계가 매우 비선형적이라면 k값이 작은 것이 유용하다!
+```
+
+
+![7_d번 문제에 대한 사진](./data/image7_d.png)
+
+
+## library load
+
+```{r library}
+# library load
+library(ISLR)
+library(MASS)
+```
+
+
+## ch2) 8.
+
+### (a)
+```{r}
+#college <- read.csv("./data/College.csv", header=TRUE, stringsAsFactors=TRUE)
+college <- read.csv("./data/College.csv", header=TRUE, stringsAsFactors=TRUE)
+str(college) # check, 첫 변수가 college name
+```
+
+### (b)
+```{r}
+rownames(college) <- college[,1]
+college[,1] <- NULL
+
+head(college)
+```
+
+### (c)
+```{r}
+#i
+summary(college)
+
+#ii
+#pairs(college[,1:10])
+#help("pairs")
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+pairs(college[,1:10], lower.panel = panel.smooth, upper.panel = panel.cor)
+
+
+#iii
+boxplot(Outstate~Private, data=college, col=c(3,7), xlab = "Private", ylab = "Outstate", main = "boxplots of Outstate vs Private")
+
+
+#iv
+Elite = rep("No", nrow(college))
+Elite[college$Top10perc > 50] = "Yes"
+Elite = as.factor(Elite)
+college = data.frame(college, Elite)
+summary(college$Elite) #how many elite universities there are. 78개
+boxplot(Outstate~Elite, data = college, xlab = "Elite", ylab = "Outstate", col = c(3,7), main = "boxplots of Outstate vs Elite")
+
+
+#v
+par(mfrow = c(2,3))
+hist(college$Books, main = "Books", breaks = 5)
+hist(college$Books, main = "Books", breaks = 20)
+hist(college$Books, main = "Books", breaks = 100)
+
+hist(college$Books, main = "Expend", breaks = 5)
+hist(college$Books, main = "Expend", breaks = 20)
+hist(college$Books, main = "Expend", breaks = 100)
+
+hist(college$Books, main = "S.F.Ratio", breaks = 5)
+hist(college$Books, main = "S.F.Ratio", breaks = 20)
+hist(college$Books, main = "S.F.Ratio", breaks = 100)
+
+hist(college$Top10perc, main = "Top10perc", breaks = 5)
+hist(college$Top10perc, main = "Top10perc", breaks = 20)
+hist(college$Top10perc, main = "Top10perc", breaks = 100)
+
+# 먼저 4개의 quantitative variables(Books, Expend, S.F.Ratio, Top10perc)에 대하여 hist함수의 breaks 옵션(간격 변화)을 5, 10, 100으로 하여 살펴보았다.
+# 5개의 interval을 가지면, 히스토그램 상에서는 하나의 큰 단위로 묶여있다. 예를들어 Books의 경우 첫 번째 그림은 500단위로 500과 1000사이에 300개의 데이터가 있는 것을 알 수 있다. 반면, 100개의 interval을 가지면, 500과 1000 사이의 들쑥날쑥한 데이터의 분포도 알 수 있다. 보면, 큰 차이가 나는 것을 볼 수 있다.
+# 즉, bin의 폭이나 개수가 히스토그램에 얼마나 영향을 주는지 알 수 있다. 
+
+par(mfrow = c(1,1)) #원래대로 돌아가기
+
+
+#vi
+colSums(is.na(college)) #결측치가 없는 것을 알 수 있다.
+summary(college) #min과 max를 중점으로 봐서 range가 넓은 것에 집중하였다.
+hist(college$Top10perc, main = "Apps", breaks = 100)
+
+#<Apps변수 관련 분석>
+plot(density(college$Apps), type = "l")
+abline(v = mean(college$Apps))
+abline(v = median(college$Apps), col = "red")
+# Apps의 분포를 확인해보니, 평균의 값과 중앙값이 많이 차이가 나는 것을 볼 수 있다.
+# 이는 왼쪽에 많이 몰려있는 것에 비해, 굉장히 큰 값이 존재하는 것이 보였다. 이를 확인하기 위해 boxplot을 이용해 보았다.
+
+boxplot(college$Apps, col = "green", horizontal = TRUE, main = "boxplot of Apps")
+# 확인해보니, 이상치가 많은 것을 볼 수 있다.
+
+
+
+#<Enroll변수 관련 분석>
+plot(density(college$Enroll), type = "l")
+abline(v = mean(college$Enroll))
+abline(v = median(college$Enroll), col = "red")
+# 위와 같은 방법으로 분포를 확인했을 때, 평균의 값과 중앙값이 많이 차이가 나는 것을 볼 수 있다.
+# 이는 왼쪽에 많이 몰려있는 것에 비해, 굉장히 큰 값이 존재하는 것이 보였다. 이를 확인하기 위해 boxplot을 이용해 보았다.
+
+boxplot(college$Enroll, col = "pink", horizontal = TRUE, main = "boxplot of Apps")
+# 확인해보니, 이상치가 많은 것을 볼 수 있다.
+```
+
+
+
+## ch2) 9.
+
+### (a)
+```{r}
+data(Auto)
+Auto <- na.omit(Auto) #결측값이 들어있는 행 전체를 데이터 셋에서 제거
+head(Auto)
+#?Auto #origin이 범주형 요소라는 것을 알 수 있다.
+str(Auto)
+
+#qualitative - name, origin  (origin means origin of car(1.American, 2. European, 3.Japanese))
+#quantitative - mpg, cylinders, displacement, horsepower, weight, acceleration, year
+```
+
+### (b)
+```{r}
+d <- sapply(Auto[,1:7], range)
+rownames(d) <- c("min", "max")
+d
+```
+
+### (c)
+```{r}
+sapply(Auto[,1:7], function(x){c('mean' = mean(x), 'sd' = sd(x))})
+```
+
+### (d)
+```{r}
+auto <- Auto[-(10:85),]
+d <- sapply(auto[,1:7], function(x){c('range' = range(x), 'mean' = mean(x), 'sd' = sd(x))})
+rownames(d) <- c("min", "max", "mean", "sd")
+d
+```
+
+### (e)
+```{r}
+pairs(Auto[1:7])
+# mpg와 음이나 양의 관계가 있는 그림을 보자.
+# mpg는 cylinders, displacement, horsepower, weight와 음의 관계가 있고, year는 양의 관계가 보인다.
+# cylinders는 displacement, horsepower, weight와 양의 관계가 있다.
+# displacement는 horsepower, weight와 양의 관계가 있다.
+# horsepower는 weight와 양의 관계가 있고, acceleration과는 음의 관계가 있다.
+```
+
+### (f)
+```{r}
+#plot과 boxplot중 선택해서 그림
+#plot(Auto$cylinders, Auto$mpg)
+par(mfrow = c(3,3))
+boxplot(Auto$mpg~Auto$cylinders)
+plot(Auto$displacement, Auto$mpg)
+plot(Auto$horsepower, Auto$mpg)
+plot(Auto$weight, Auto$mpg)
+plot(Auto$acceleration, Auto$mpg)
+#plot(Auto$year, Auto$mpg)
+boxplot(Auto$mpg~Auto$year)
+#plot(Auto$origin, Auto$mpg)
+boxplot(Auto$mpg~Auto$origin)
+
+# cylinders, year, origin 변수의 경우, 연속형 변수가 아니기 때문에, 산점도보다는 상자그림이 더 결과를 보는데에 효과적일 것 같아서 상자그림으로 그렸다.
+
+# mpg를 종속변수로 두었을 때, 각 설명변수와의 관계를 살펴본 결과 그림과 같은 결과가 보인다. 눈으로 보기에는 acceleration을 제외하고는 비례적인 관계로 보인다. 따라서 mpg를 예측하는 데에 유용해보인다.
+```
+
+
+
+## ch2) 10. 
+
+### (a)
+```{r}
+head(Boston) 
+# ?Boston
+dim(Boston) #행 506개 / 열 14개
+names(Boston) # check the variable names
+#보스턴 시의 주택 가격에 대한 데이터
+#행은 주택에 대한 관측치(506개)
+#열은 주택과 관련한 측정 지표들(14개)
+```
+
+### (b)
+```{r}
+#help("pairs") pairs문서에 오픈되어 있는 함수 이용
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+# 산점도 만으로는 알아보기 힘드므로 상관계수를 같이 보았다.
+pairs(Boston, lower.panel = panel.smooth, upper.panel = panel.cor)
+
+# 가장 눈에 띄게 관계가 보이는 것을 살펴보자. 상관관계가높아보이는 변수들을 모아 pairs를 다시 그려보았다.
+pairs(~indus+nox+rm+age+dis+tax+lstat+medv, data = Boston, lower.panel = panel.smooth)
+
+# indus는 nox, age, tax, lstat과 양의 관계가 있고, dis, medv와 음의 관계가 있다.
+# nox는 age, tax, lstat와 양의 관계가 있고, dis, medv와 음이 관계가 있다.
+# rm은 lstat과 음의 관계가 있고, medv와 양의 관계가 있다.
+# age는 dis와 음의 관계가 있다.
+# lstat과 medv는 음의 관계가 있다.
+```
+
+### (c)
+```{r}
+# crim과 다른 변수들간의 상관계수를 살펴보자.
+correlation_store <- numeric(13) #상관계수가 들어간 벡터
+for (i in 2:14) {
+    correlation_store[i-1] <- cor(Boston[i], Boston[1])[1]
+}
+names(correlation_store) <- names(Boston)[2:14]
+correlation_store
+
+
+
+par(mfrow =c(2,3))
+plot(Boston$zn, Boston$crim) # 낮은 음의 관계 , 낮은 범죄율이 주거당 토지 비율(zn)과는 상관없이 발생 하는 것 같다. 그런데 특히 zn이 0인 곳에서 높은 범죄율이 보였다.
+plot(Boston$indus, Boston$crim) # 낮은 양의 관계, 비소매사업비율(indus)  10이하인 곳에서 낮은 범죄율이 많이 분포해 보인다. 그 중 indus가 20 근처에서 상대적으로 높은 범죄율이 발생해 보인다.
+#plot(Boston$chas, Boston$crim) 
+boxplot(Boston$crim~Boston$chas) # 엄청 낮은 음의 관계, 근처에 강이 없는 곳에서 범죄율이 높아 보인다.
+plot(Boston$nox, Boston$crim) # 낮은 양의 관계, 질소 산화물 농도(nox)와 관계없이 범죄율이 상당히 많이 분포되어 있어 보인다, 특히 nox가 0.7 부근에서 높은 범죄율이 발생했다.
+plot(Boston$rm, Boston$crim)  # 낮은 음의 관계, 주거 당 평균 방수와 상관없이 범죄율이 분포에 있다.
+plot(Boston$age, Boston$crim) # 낮은 양의 관계, age와 상관없이 범죄율이 분포에 보인다. 그 중 age가 100년 부근에서 높은 범죄율이 보인다. 
+plot(Boston$dis, Boston$crim) # 낮은 음의 관계, dis와 관계없이 범죄율이 분포해 보인다. 그 중 dis가 2 부근에서는 높은 범죄율이 보인다.
+plot(Boston$rad, Boston$crim) #양의 관계  rad값이 높은 지점에서 범죄율이 분포해 보인다.
+plot(Boston$tax, Boston$crim) #양의 관계 tax값이 높은 지점에서 범죄율이 분포해 보인다.
+plot(Boston$ptratio, Boston$crim) # 낮은 양의 관계, ptratio와 상관없이 범죄율이 분포해 보인다. 그 중 ptratio가 20 부근에서 높은 범죄율이 보인다.
+plot(Boston$black, Boston$crim)  # 낮은 음의 관계, 흑인 비율이 낮은 곳과 높은 곳에서 범죄율이 발생해 보인다.
+plot(Boston$lstat, Boston$crim) # 낮은 양의 관계, lstat가 높아질 수록 범죄율도 높아지는 것 같다.
+plot(Boston$medv, Boston$crim) # 낮은 음의 관계, medv가 낮을 수록 범죄율이 많이 발생하는 것  같다.
+
+par(mfrow =c(2,3))
+
+# crim과 예측변수들의 관계를 살펴본 결과, 특이점이 보이는 변수들을 다시 모아 보았다.
+# zn, chas, rad, tax, ptratio, medv가 특정 지점에서 특히 높은 crim이 보인다.
+# crim이 특정 지점에서 상대적으로 많이 분포되어 있는 것을 확인하였다. 
+
+plot(Boston$zn, Boston$crim)
+points(Boston$zn[Boston$crim > 3.67708 & Boston$zn < 10], Boston$crim[Boston$crim > 3.67708 & Boston$zn < 10], col = 2, pch = 15)
+#25000 평방피트를 초과하는 거주지역의 비율이 적을 수록 범죄율이 높음.
+
+boxplot(Boston$crim~Boston$chas) 
+# 강의 경계에 위치하지 않은 경우에 범죄율이 높은 경우가 있다.
+
+plot(Boston$rad, Boston$crim) 
+points(Boston$rad[Boston$crim > 3.67708 & Boston$rad > 20], Boston$crim[Boston$crim > 3.67708 & Boston$rad > 20], col = 3, pch = 15)
+# 방사형 도로까지의 접근성 지수가 20이 넘는 경우 범죄율이 급격히 높아지는 것을 볼 수 있다.
+
+plot(Boston$tax, Boston$crim) 
+points(Boston$tax[Boston$crim > 3.67708 & Boston$tax > 600], Boston$crim[Boston$crim > 3.67708 & Boston$tax > 600], col = 4, pch = 15)
+# tax가 600이상인 경우, 범죄율이 급격히 상승하는 것을 볼 수 있다.
+
+plot(Boston$ptratio, Boston$crim)
+points(Boston$ptratio[Boston$crim > 3.67708 & Boston$ptratio > 20], Boston$crim[Boston$crim > 3.67708 & Boston$ptratio > 20], col = 5, pch = 15)
+# 학생과 교사 비율이 20% 정도 될 때, 범죄율이 높은 경향이 있다.
+
+plot(Boston$medv, Boston$crim)
+points(Boston$medv[Boston$crim > 3.67708 & Boston$medv < 10], Boston$crim[Boston$crim > 3.67708 & Boston$medv <10], col = 6, pch = 15)
+# 본인 소유의 주택 가격이 높아질수록 범죄율이 감소하는 것을 볼 수 있다.
+```
+
+### (d)
+```{r}
+# 범죄율이 특히 높은 곳 어디에서?
+# 범죄율 - 세율? 학생-교사 비율?
+
+sapply(Boston[,c(1,10,11)], range)
+# 각 예측변수의 범위는 crim: 0.006~88.976 tax: 187~711 ptratio: 12.6~22.0 이다.
+
+par(mfrow = c(2,2))
+plot(Boston$tax,Boston$crim,col=c(2,3))
+abline(v=range(Boston$tax),col=2) # red선은 tax의 범위
+abline(h=range(Boston$crim),col=3) # green선은 crim의 범위
+# 범죄율이 특히 높은 곳은 tax가 높을 때 발생 한 적이 있고 tax가 700 근처에서 상대적으로 범죄율이 많이 발생해 보인다.
+# 하지만 tax가 높을 때 범죄율은 대체적으로 20이하로 분포되어 있고 
+# tax가 낮을 때도 0 주위에 분포되어 있어서 범죄율과 관련하여 의미가 있어 보이지 않는다.
+
+plot(Boston$ptratio,Boston$crim, col=c(4,3))
+abline(v=range(Boston$ptratio),col=4) # blue선은 ptratio의 범위
+abline(h=range(Boston$crim),col=3) # green선은 crim의 범위
+# 도시당 학생-교사 비율이 20 이상으로 많을 때 범죄율 발생률 나타나 보이고 특히 상대적으로 높은 범죄율을 보인다.
+
+```
+
+### (e)
+```{r}
+table(Boston$chas)
+barplot(table(Boston$chas),legend.text = c("1=tract bounds river", "0 otherwise")) #35
+#the suburbs in this data set boun th eCharles river -> 35개의 교외가 charles river의 경계에 있었다.
+```
+
+### (f)
+```{r}
+median(Boston$ptratio) 
+#도시당 학생-교사 비율의 중간값은 19.05이다.
+#그래픽적으로 확인해보면 아래와 같다.(red line = median)
+hist(Boston$ptratio, breaks=50)
+abline(v=median(Boston$ptratio),col=2)
+
+```
+
+### (g)
+```{r}
+Boston[which(Boston$medv == min(Boston$medv)),]
+#주택의 중앙값이 5로 가장 낮은 곳은 399, 406번째의 관측치였다.
+
+# 각 관측치의 예측 변수들을 살펴본 결과 
+# 각 관측치의 다른 예측 변수의 값은 crim을 제외한 나머지는 비슷한 값이였고(아래 따로 표기)
+# crim은 406번째가 399번보다 확연하게 차이가 나는 것은 아니지만 대략 1.5배 이상의 범죄율을 보였다.
+
+#그래픽적으로 확인한 결과 406번이 범죄율이 높은 편이긴 한데 406,399는 다른 관측치들에 비해 상당히 떨어져 있는 것을 확인 할 수 있었다.
+plot(Boston$crim, xlab="관측치")
+points(c(Boston[406,]$crim,Boston[399,]$crim), col=3, pch=15)
+abline(h=median(Boston$crim),col=3) # 중앙값에서 많이 벗어나 보인다.
+
+boxplot(Boston$crim, horizontal = T, xlab = "crim", col = "pink")
+
+summary(Boston$crim)
+# boxplot과 summary를 통해 다시 보면, 확실히 이상치임을 알 수 있었다.
+# crim의 median은 약 0.25인데 399, 406번째의 관측치의 crim은 약 38, 67이었고 
+# 전체 range에 비해 crim의 median이 엄청 낮았다. 
+
+# 그 외에는 두 관측치 모두 
+# zn (주거용 토지 비율) = 0
+# indus (타운 당 비 소매 사업 비율) = 18.1
+# chas = 0 
+# nox (질소 산화물 농도) = 0.693 
+# age = 100 
+# rad (방사형 고속도로에 대한 접근성 지수) = 24 
+# tax = 666 
+# ptratio = 20.2 이었고
+
+# 406번<399번 rm (주거 당 평균 방 수)=5.453 < 5.683
+# 406번>399번 dis(5개 보스턴 고용 센터까지의 가중 평균 거리)=1.4896>1.4254
+# 406번>399번 black 396.9>384,97
+# 406번>399번 lstat (인구의 낮은 지위(%)) 30.59>22.98 이었다.
+```
+
+### (h)
+```{r}
+# 대략적인 분포를 위해 히스토그램을 그려보았다.
+hist(Boston$rm, main = "average number of rooms per dwelling")
+length(Boston$rm[Boston$rm>7]) # 주거 당 평균 방 수가 7개 초과인 곳은 64곳이었다.
+length(Boston$rm[Boston$rm>8]) # 주거 당 평균 방 수가 8개 초과인 곳은 13곳이었다.
+
+summary(Boston[Boston$rm > 8,])
+summary(Boston)
+# 두 개를 비교해 보았을 때, 주거 당 평균 방이 8개 이상인 교외에서는 crim(per capita crime rate by town), lstat(lower status of the population), tax가 적은 것을 알 수 있고, medv(median value of owner-occupied homes in $1000s)는 큰 편인 것을 알 수 있다. 이를 그래프로 표현하면 다음과 같다.
+par(mfrow = c(2,2))
+plot(Boston$rm, Boston$crim, )
+points(Boston$rm[Boston$rm>8], Boston$crim[Boston$rm>8], pch = 17, col = 2)
+
+plot(Boston$rm, Boston$lstat)
+points(Boston$rm[Boston$rm>8], Boston$lstat[Boston$rm>8], pch = 17, col = 3)
+
+plot(Boston$rm, Boston$tax)
+points(Boston$rm[Boston$rm>8], Boston$tax[Boston$rm>8], pch = 17, col = 4)
+
+plot(Boston$rm, Boston$medv)
+points(Boston$rm[Boston$rm>8], Boston$medv[Boston$rm>8], pch = 17, col = 5)
+```
+

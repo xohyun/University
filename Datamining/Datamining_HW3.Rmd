@@ -1,0 +1,441 @@
+---
+title: "Datamining-HW3"
+author : "01조"
+date : "2020.10.14"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+## library load
+```{r library}
+# library load
+library(ISLR)
+library(class)
+library(pROC)
+library(boot)
+```
+
+
+## 5.5
+> 분류 모형평가
+> 4장에서, 로지스틱 회귀를 사용해 income 과 balance을 가지고 default 확률을 예측했다.
+> validation set approach를 사용하여 로지스틱 회귀에 대한 test error를 추정해보자.
+> (Do not forget to set a random seed before beginning your analysis.)
+
+### (a) fit logistic regression model
+```{r}
+set.seed(1)
+data(Default)
+fit.glm <- glm(default ~ income + balance, data = Default, family = "binomial")
+summary(fit.glm)
+```
+
+### (b) validation set approach => test error
+```{r} 
+#  학습세트와 검증세트를 나누는 비율에 따른 cv를 함수로 만들었습니다.
+
+cv <- function(ratio) {
+#i)
+n = nrow(Default)
+ind.shuff <- sample(1:n, size = n)
+#----------ratio----------#
+n.tr <- floor(n * ratio)
+n.val <- n - n.tr
+#-------------------------#
+train <- Default[ind.shuff[1:n.tr],]
+val <- Default[ind.shuff[(n.tr+1):n],]
+
+#ii)
+fit.glm.train <- glm(default ~ income + balance, data = train, family = "binomial")
+print(summary(fit.glm.train))
+
+#iii)
+x.val = val[c("income", "balance")]
+
+y.val.hat <- as.matrix(cbind(1, x.val)) %*% as.vector(coef(fit.glm.train))
+fit.prob <- exp(y.val.hat) / (1 + exp(y.val.hat))
+
+y.val.class <- ifelse(fit.prob > 0.5, "Yes", "No")
+
+#+iv)
+mat <- table(val$default, y.val.class)
+print(mat) # 정오행렬
+
+result <- numeric(5)
+
+result[1] <- (mat[2]+mat[3]) / sum(mat) #오분류율
+result[2] <- mat[4] / (mat[2]+mat[4]) #민감도
+result[3] <- mat[1] / (mat[1]+mat[3]) #특이도
+result[4] <- mat[4] / (mat[3]+mat[4]) #정밀도
+result[5] <- mat[4] / (mat[2]+mat[4]) #재현율
+
+names(result) <- c("오분류율","민감도","특이도","정밀도","재현율") 
+print(result)
+
+#+v) (iv)에서는 cutoff를 0.5로 정하여 오류지표를 계산하였다. 
+#cutoff를 정하지 않은 상태를 가정하고, ROC 곡선을 그린 후 AUROC를 계산하세요.
+
+# pROC패키지 사용시
+r <- roc(val$default, as.vector(fit.prob))
+plot.roc(r)
+print(auc(r)) #0.9506
+
+# ROC곡선 하드코딩; 하드코딩이라 중간에 직선은 이쁘게 봐주세여.. 0.6쯤부터는 값이 나오지 않으므로 이어지질 않더라구요. (roc 패키지는 알아서 해주는 부분..)
+
+cut <- seq(1,0, by = -0.001)
+roccurve <- matrix(0, ncol = 2, nrow = length(cut))
+for (i in 1:length(cut)) {
+  y.val.hat.res <- ifelse(fit.prob > cut[i], "Yes", "No")
+  t <- table(val$default, y.val.hat.res)
+  if (!("No" %in% y.val.hat.res)) { roccurve[i,] <- c(0, 0); next;}
+  if (!("Yes" %in% y.val.hat.res)) { roccurve[i,] <- c(1, 1); next;}
+  t <- table(val$default, y.val.hat.res)
+  specificity <- t[1] / (t[1] + t[3])
+  sensitivity <- t[4] / (t[2] + t[4])
+  roccurve[i,] <- c(1-specificity, sensitivity)
+}
+k <- data.frame(seq(roccurve[1000,1],1,by = 0.01),1) # 중도에 끊기는 부분부터, 1로 채워줌
+roccurve <- data.frame(roccurve)
+names(k) <- names(roccurve)
+roccurve <- rbind(roccurve, k)
+plot(roccurve[,1], roccurve[,2], type = "l", col = "skyblue", lwd = 4, xlab="1-특이도", ylab="민감도", main=" >하드코딩< ROC 커브 ")
+
+}
+
+cv(0.5) # ratio=0.5 => by validation set approach, 나이브하게
+
+```
+
+### (c) (b)의 수정/추가사항을 모두 반영하여 답하세요.
+```{r}
+#options(warn = 0)
+par(mfrow=c(3,2))
+cv(0.9) # tr:val = 9:1
+cv(0.8) # tr:val = 8:2
+cv(0.3) # tr:val = 3:7
+
+# 훈련세트와 검증세트를 나누는 비율을 다르게 해본 결과,
+# 9:1의 극단적인 비율에서는 오분류율이 작게 나오는 것을 볼 수 있다.
+# 8:2와 3:7의 비율에서는 민감도, 특이도, 정밀도, 재현율이 비슷하다.
+```
+
+### (d) 더미변수 student 추가, test error 추정 using validation set approach
+```{r}
+df<-Default
+#df$student <- ifelse(df$student=="Yes", 2, 1)
+fit.glm <- glm(default ~ income + balance + student, data=df, family='binomial')
+summary(fit.glm)
+#income, balance가 설명변수였을 때의 모델에서는 두 변수의 회귀계수 모두 유의수준 0.05하에서 유의하다 판단되지만, student 변수를 추가한 뒤 모델을 적합시켰을 때에는 income 변수의 회귀계수가 유의수준 0.05하에서 유의하지 않다 판단된다.
+
+set.seed(1)
+n = nrow(df)
+ind.shuff <- sample(1:n, size = n)
+n.tr <- floor(n * 0.7)
+n.val <- n - n.tr
+
+train <- df[ind.shuff[1:n.tr],]
+val <- df[ind.shuff[(n.tr+1):n],]
+
+#predict()사용 시
+prob <- predict(fit.glm, newdata=val, type="response")
+class <- ifelse(prob > 0.5, "Yes", "No")
+mean(class!=val$default) # 0.02733333
+
+############################
+# 과제 외적으로 행렬 계산을 이용한 풀이를 해보았습니다. 하지만, 팩터이기 때문에 계산이 제대로 되지 않아, 우선 predict를 사용하였고, 이 부분은 주석 처리합니다. 이 부분이 궁금하여 추후에 질문하려고 남겨두었습니다.
+
+# fit.glm.train <- glm(default ~ income + balance + student, data = train, family = "binomial")
+# summary(fit.glm.train)
+# 
+# x.val = as.matrix(val[c("income", "balance","student")])
+# 
+# y.val.hat <- cbind(1, x.val) %*% coef(fit.glm.train)
+# fit.prob <- exp(y.val.hat) / (1 + exp(y.val.hat))
+# 
+# y.val.class <- ifelse(fit.prob > 0.5, "Yes", "No")
+# 
+# mat <- table(val$default, y.val.class)
+# print(mat) # 정오행렬
+# 
+# result <- (mat[2]+mat[3]) / sum(mat)
+# result # 0.02766667
+############################
+
+
+# student 지시변수를 추가한 모델을 이용하여 구한 검증오류는 0.02733333로 앞의 income, balance 변수만을 이용하여 적합한 모델의 검증오류(0.0254000)보다는 조금 크게 나왔다.
+# student 지시변수가 유의하다 판단 될 만큼의 큰 차이라고는 없다고 판단된다.  
+
+```
+
+
+## 5.6 
+>부트스트랩
+>income과 balance에 대한 standard error 추정치를 두 가지 방법으로 계산해보자.
+>(1) 부트스트랩 사용
+>(2) glm() 함수에서 standard error를 계산하는 표준공식사용
+>(Do not forget to set a random seed before beginning your analysis.)
+
+### (a) determine the estimated standard error
+```{r}
+df <- Default
+set.seed(1004)
+
+fit.glm <- glm(default ~ income + balance, data = df, family = "binomial")
+summary(fit.glm)$coef
+
+# 적합결과, 추정된 
+# income의 회귀계수의 standard error는 4.985e-06, 
+# balance의 회귀계수의 standard error는 2.274e-04이다.
+```
+
+### (b) boot.fn() => income and balance의 coefficient estimates하는 함수
+```{r}
+boot.fn <- function(dataset, idx) {
+  fitting <- glm(default ~ income + balance, data = dataset, family = "binomial", subset = idx)
+  return(coef(fitting)[2:3])
+}
+
+```
+
+### (c) boot() + boot.fn() => estimate the standard errors for income and balance.
+```{r}
+fit.boot <- boot(df, boot.fn, 50)
+fit.boot
+
+# (c)에서의 적합결과, 추정된 
+# income의 회귀계수의 standard error는  4.945925e-06, 
+# balance의 회귀계수의 standard error는  2.503216e-04 이다.
+```
+
+### (d) glm()으로 얻은 sd vs bootstrap 으로 얻은 sd
+```{r}
+summary(fit.glm)  # glm 결과
+fit.boot # boot 결과
+
+# glm을 이용하여 얻은 회귀계수의 추정된 standard error와 boot 함수를 이용하여 얻은 추정된 standard error는 비슷한 결과를 보인다.
+```
+
+
+
+## 5.8
+> 회귀 모형평가
+> 5-fold CV로 변경하고 푸세요.
+
+### (a) cross-validation
+```{r}
+set.seed(1)
+x = rnorm(100)
+y = x - 2 * x^2 + rnorm(100)
+
+# n은 관측치의 수이므로, 100이다.
+# p는 변수의 수이므로, 2이다.
+# model form은 아래와 같다.
+```
+
+$$ y=x-2x^2+ε\ , \ ε \sim N(0,1) $$
+
+
+### (b) 
+```{r}
+plot(x, y, col='skyblue')
+# x, y의 관계가 위로 볼록인 형태 즉, 이차함수 형태(포물선 그림)처럼 나타난다. 
+# points가 볼록 튀어 나온 지점에 많이 몰려 있어 보인다.
+# 따라서 적합시에, 선형회귀모형을 적용하는 것보다 포물선 형태의 모형이 더 적절할 것 같다.
+```
+
+
+### (c) compute the 5-CV errors
+```{r}
+# 각 모형의 5-CV errors를 계산하는 함수를 만들어 보았습니다.
+K = 5; n = 100
+
+cv.mse.f <- function(seednum) {
+  
+  set.seed(seednum)
+  data <- data.frame(x, y)
+  
+  mse.res <- numeric(4) # 각 모형의 MSE 저장
+  mse.glm = numeric(K)  # 한 모형에서의 5번 cv한 MSE 평균을 저장
+  
+  for (p in 1:4) {
+    ind.shf = sample(1:n, size = n)
+    
+    for (k in 1:K) {
+      ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+      ind.tr = setdiff(1:n, ind.val)
+      df.tr = data[ind.tr,]
+      df.val = data[ind.val,]
+      
+      x.tr = df.tr$x
+      y.tr = df.tr$y
+      x.val = df.val$x
+      y.val = df.val$y
+      
+      xmat = matrix(0, nrow=nrow(df.tr), ncol=p)
+      xmat.val = matrix(0, nrow=nrow(df.val), ncol=p)
+      
+      for (j in 1:p) { 
+        xmat[ ,j] = x.tr^j
+        xmat.val[,j] = x.val^j
+      }
+      
+      glm.fit = glm(y.tr ~ xmat)
+      
+      y.val.hat = as.matrix(cbind(1, xmat.val)) %*% coef(glm.fit)
+      mse.glm[k] = mean((y.val - y.val.hat)^2)
+    }
+    mse.res[p] <- mean(mse.glm)
+  }
+  mse.res
+}
+
+cv.mse.f(1) # seednum=1, 순서대로 i ~ iv 번모형의 5-CV errors
+
+```
+
+### (d) using another random seed
+```{r}
+cv.mse.seed <- matrix(ncol = 4, nrow = 50) # seed값을 다르게 해서 MSE 저장 
+rs <- sample(1:1000, size=50) # seed에 넣을 값을 랜덤하게 50개 정도 뽑아서 해봤습니다!
+for (i in 1:50) {
+  cv.mse.seed[i,] <- cv.mse.f(rs[i])
+}
+apply(cv.mse.seed, 2, mean)
+# (c)번의 결과와 비슷해 보인다. 평균적으로 2차의 모형일 때, mse가 제일 작은 것을 볼 수 있다.
+# (b)번에서 우리가 예상했던 대로 포물선 형태인 2차가 가장 잘 적합하게 된 것 같다. 
+```
+
+### (e) the smallest 5-cv error
+$$ Y=beta0+beta1*X+beta2*X^2+ε\ , \ ε \sim N(0,1) $$
+```{r}
+# (c)번의 결과를 보면, 가장 작은 5-cv error를 갖는 모형은 두 번째 모형이었다.
+# 우리가 예상했던대로 두 번째 모형인 2차함수모형이 결과로 나온 것을 확인하였다.
+# (a)번에서도 우리가 true model이 2차 함수 였기 때문에 이러한 결과가 나오는 것이 타당해 보인다.
+```
+
+### (f) fitting each of the models in (c) using least squares. 전체데이터셋으로 적합한 결과와 cv를 사용한 결과에 대한 비교로 이해
+```{r}
+set.seed(1)
+data<-as.data.frame(cbind(x,y))
+
+model1<-glm(y~x,data=data)
+summary(model1)$coef
+#--------------------------1번 모형--------------------------
+# x의 회귀계수 p-value가 통상적인 유의수준 0.05보다 작으므로 
+# 유의수준 0.05하에서 x의 회귀계수가 0이 아니라고(유의하다고) 할 수 있다.
+
+
+model2<-glm(y~x+I(x^2),data=data)
+summary(model2)$coef
+#--------------------------2번 모형--------------------------
+# x의 회귀계수, x^2의 회귀계수들의  p-value가 모두 통상적인 유의수준 0.05보다 작으므로 
+# 유의수준 0.05하에서 x의 회귀계수, x^2의 회귀계수가 0이 아니라고(유의하다고) 할 수 있다.
+
+model3<-glm(y~x+I(x^2)+I(x^3),data=data)
+summary(model3)$coef
+#--------------------------3번 모형--------------------------
+# x의 회귀계수, x^2의 회귀계수들의  p-value가 모두 통상적인 유의수준 0.05보다 작으므로 
+# 유의수준 0.05하에서 x의 회귀계수, x^2의 회귀계수가  0이 아니라고(유의하다고) 할 수 있다.
+# 반면, x^3의 회귀계수의 p-value는 유의수준 0.05보다 크므로 
+# 유의수준 0.05하에서 x^3의 회귀계수는 0이라 할 수 있다.즉, 유의하지 않다.
+
+model4<-glm(y~x+I(x^2)+I(x^3)+I(x^4),data=data)
+summary(model4)$coef
+#--------------------------4번 모형--------------------------
+# x의 회귀계수, x^2의 회귀계수들의  p-value가 모두 통상적인 유의수준 0.05보다 작으므로 
+# 유의수준 0.05하에서 x의 회귀계수, x^2의 회귀계수가  0이 아니라고(유의하다고) 할 수 있다.
+# 반면, x^3의 회귀계수, x^4의 회귀계수들의 p-value는 유의수준 0.05보다 크므로 
+# 유의수준 0.05하에서 x^3의 회귀계수, x^4의 회귀계수는 0이라 할 수 있다.즉, 유의하지 않다.
+
+# 결과적으로 유의수준 5%에서, 4개의 모형 모두 x와, x^2의 회귀계수만이 통계적으로 유의한 결과를 보였다.
+# 따라서 두 번째 모형인, 2차 함수 모형이 주어진 데이터셋에 대하여 가장 적합한 모형이라고 판단된다.
+# 이는 앞서 cross-validation 결과와도 동일함을 확인하였다.
+```
+
+
+## 추가문제
+```{r}
+############################################################
+############## 테스트용 시뮬레이션 데이터 생성 #############
+############################################################
+# define the inverse logit function
+expit = function(t) return(exp(t) / (1 + exp(t)))
+# sample size is n=10000, the number of variables is p=2
+n = 10000
+X1 = rnorm(n)
+X2 = rnorm(n)
+# the true coefficients. beta0 = 1, beta1 = -2, beta2 = 1
+theta.true = c(1, -2, 1)
+# beta0 + beta1 * X1 + beta2 * X2
+x_theta = theta.true[1] + theta.true[2] * X1 + theta.true[3] * X2           
+# Y|X1,X2 follows the Bernoulli distribution 
+#    with the success probability as expit(beta0 + beta1 * X1 + beta2 * X2)
+y = rbinom(n=n, size=1, prob=expit(x_theta)) 
+
+
+# 보조적인 개체
+# 상수항(1)을 포함한 자료행렬. 아래 반복문에 필요할 겁니다.
+Xmat = cbind(1, X1, X2)
+
+############################################################
+# 반복적 국소 이차 근사로 로지스틱 회귀분석 계수 구하기 시작
+############################################################
+# 최대 반복수. 코딩오류로 인한 무한루프를 막기 위하여 실무적으로 설정해줌
+MAXITER = 1000
+# 기존값과 갱신값이 tol 미만이면 수렴을 선언할 계획임. 실무적으로 10^-4 ~ 10^-6을 애용합니다.
+tol = 10^-8
+# 반복 갱신될 theta의 초기값 설정 
+theta.old = 0
+theta.old = matrix(0, nrow = 3, ncol = 1)
+# 반복 알고리즘 시작
+for (t in 1:MAXITER) {
+  # 모니터링을 위한 프린트문
+  cat(sprintf("============ Iteration %d ==========\n", t))
+  
+  #--------------------------------------------------------------------------#
+  # y, Xmat, p=expit, D 대각행렬
+  z <- Xmat %*% theta.old
+  p <- as.vector(expit(z))
+  D <- diag(p*(1-p))
+  
+  compute1 <- solve(t(Xmat) %*% D %*% Xmat) %*% t(Xmat) %*% (y-p)
+  theta.new <- theta.old + compute1
+  #--------------------------------------------------------------------------#
+  
+  # diff는 theta.new와 theta.old간 유클리드 거리로 정의하였음
+  diff = sqrt(sum((theta.new - theta.old)^2))
+  sprintf("L2 difference between theta.new and theta.old: %.8f\n", diff)		
+  
+  # theta가 충분히 수렴한 듯하면 
+  # 가장 최신의 theta.new를 theta의 추정값(theta.hat)으로 제시 후
+  # 반복문 빠져나가기
+  if (diff < tol) {	
+   cat(sprintf("Fisher scoring algorithm converged with %d iterations\n", t))
+   theta.hat = theta.new
+   break
+  }
+  
+  # 수렴 실패하였을 경우 메시지 출력
+  if (t == MAXITER) cat("Did not converge\n")
+  
+  #--------------------------------------------------------------------------#
+ 	theta.old <- theta.new
+  #--------------------------------------------------------------------------#
+}
+
+############################################################
+######################### 테스트 ###########################
+############################################################
+
+# 첫번째 체크. n을 크게 설정할수록 theta.true에 가까운 값이 출력되어야 함
+print(theta.hat)
+# 두번째 체크. theta.hat과 동일한 값이 나와야 함
+test<-glm(y~ X1 + X2, family=binomial)
+summary(test)
+```
+
+# 추가문제를 위한 수식적 풀이
+
+![사진1](./data/photo1.jpg)
+![사진2](./data/photo2.jpg)

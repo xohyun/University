@@ -1,0 +1,752 @@
+---
+navbar:
+  title: "datamining_HW5"
+author : "01조"
+date : "2020.11.24"
+output:
+  html_document:
+    theme: cosmo
+    highlight: textmate
+    
+---
+## library load
+```{r library}
+library(ISLR)
+library(gbm)
+library(glmnet)
+library(randomForest)
+library(class)
+library(pROC)
+
+# 데이터 조작 및 시각화
+library(dplyr)
+library(ggplot2)
+```
+
+
+## 8.10 
+data = Salary Hitters
+
+### (a) Remove the observations for whom the salary information is unknown, and then log-transform the salaries.
+```{r}
+data("Hitters")
+df<-Hitters
+table(is.na(df$Salary)) #NA값이 59개
+df <- na.omit(Hitters)
+df$Salary <- log(df$Salary)
+
+```
+
+### (b) Create a training set consisting of the first 200 observations, and a test set consisting of the remaining observations.
+```{r}
+train <- df[1:200,]
+test <- df[201:nrow(df),]
+```
+
+### (c) Perform boosting on the training set with 1,000 trees for a range of values of the shrinkage parameter λ. Produce a plot with different shrinkage values on the x-axis and the corresponding training set MSE on the y-axis. (d) Produce a plot with different shrinkage values on the x-axis and the corresponding test set MSE on the y-axis.
+
+```{r}
+set.seed(1)
+
+#shrink <- seq(0.002, 1, by = 0.01)
+shrink<-c(0.02,0.1,0.5)
+tree <- seq(0,1000,by=50)
+
+train_errors <- matrix(NA,ncol=3,nrow=length(tree))
+test_errors <- matrix(NA,ncol=3,nrow=length(tree))
+
+
+for (i in 1:length(shrink)) {
+  obj.gbm = gbm(Salary ~., data = train,
+              distribution = "gaussian",
+              n.trees = 1000,
+              interaction.depth = 3,
+              shrinkage = shrink[i])
+  
+  for(j in 1:length(tree)){
+  yhat.gbm.train = predict(obj.gbm, newdata = train, n.trees = tree[j], type = "link")
+  yhat.gbm.test  = predict(obj.gbm, newdata = test, n.trees = tree[j], type = "link")
+  
+  train_errors[j,i] <- mean((train$Salary-yhat.gbm.train)^2)
+  test_errors[j,i] <- mean((test$Salary-yhat.gbm.test)^2)
+  }
+}
+```
+
+```{r}
+#plot(shrink, train_errors, col = "skyblue", type = "b", ylim = c(0,0.8), xlim = c(0,1), ylab = "MSE")
+plot(tree, train_errors[,1],type='l',col='blue',ylab='MSE',xlab='number of tree'); par(new=T)
+plot(tree, train_errors[,2],xaxt="n", yaxt="n",xlab="",ylab="",type='l',col='red'); par(new=T)
+plot(tree, train_errors[,3],xaxt="n", yaxt="n",xlab="",ylab="",type='l',col='green'); par(new=T)
+
+plot(tree, test_errors[,1],xaxt="n", yaxt="n",xlab="",ylab="",type='o',col='blue'); par(new=T)
+plot(tree, test_errors[,2],xaxt="n", yaxt="n",xlab="",ylab="",type='o',col='red'); par(new=T)
+plot(tree, test_errors[,3],xaxt="n", yaxt="n",xlab="",ylab="",type='o',col='green'); 
+
+legend("topright",c('0.02','0.1','0.5','train_MSE','test_MSE'),col=c('blue','red','green','black','black'),lty=c(1,1,1,1,4),lwd = c(1,1,1,2,2))
+title('축소계수별 train MSE vs test McSE')
+```
+
+### (e)  Compare the test MSE of boosting to the test MSE that results from applying two of the regression approaches seen in Chapters 3 and 6.
+```{r}
+obj.lm <- lm(Salary ~. , data = train)
+yhat.lm <- predict(obj.lm, test)
+mse.lm <- mean( (test$Salary - yhat.lm)^2 )
+mse.lm
+
+
+set.seed(1)
+x.train <- model.matrix(Salary ~ ., data = train)
+y.train <- train$Salary
+x.test <- model.matrix(Salary ~., data = test)
+y.test <- test$Salary
+
+mse.lasso <- numeric(3)
+grid<-c(0.02,0.1,0.5)
+obj.lasso <- glmnet(x.train, y.train, alpha = 1, lambda = grid, family = "gaussian")
+for(i in 1:length(grid)){
+  yhat.lasso <- cbind(1,x.train)%*%coef(obj.lasso)[,i]
+  mse.lasso[i] <- mean( (y.train - yhat.lasso)^2 )
+}
+mse.lasso
+
+obj.lasso <- glmnet(x.train, y.train, alpha = 1, lambda = 0.5, family = "gaussian")
+yhat.lasso.final <- cbind(1,x.test)%*%coef(obj.lasso)
+mse.lasso.final <- mean( (y.test - yhat.lasso.final)^2 )
+
+
+my.names = c("gb", "lm", "lasso")
+
+my.mses = c(mean(test_errors), mse.lm, mse.lasso.final)
+data.frame( "Method" = my.names, "ValErr_MSE" = my.mses)
+
+```
+gradient boosting의 mse : 0.3246291	 (최적의 람다 0.5로 구함)
+lm의 mse : 0.4917959
+lasso regression의 mse : 0.5928047	
+
+### (f) Which variables appear to be the most important predictors in the boosted model?
+```{r}
+summary(obj.gbm)
+```
+
+  * summary한 결과, 각 변수들의 relative influence 결과가 나오는데 이 값이 제일 큰 변수는 'CAtBat' 변수이다. 즉, 'CAtBat' 변수가 Salary를 예측하는데 가장 중요한 predictor인 것을 알 수 있다.
+
+### (g) Now apply bagging to the training set. What is the test set MSE for this approach?
+```{r}
+p = ncol(train) - 1
+obj.bag = randomForest(Salary ~ . , data=train, mtry = p, importance=TRUE, ntree = 1000)
+x.test <- test[,-19]
+yhat.bag = predict(obj.bag, x.test, type = "response")
+mse.bag <- mean( (y.test - yhat.bag)^2 )
+mse.bag
+```
+
+
+## 추가문제 
+Caravan2은 보험 회사(TIC) 벤치 마크에 관한 데이터 셋이다. 데이터에는 5822 개의 실제 고객 레코드가 포함된다. 각 레코드는 사회 인구 학적 데이터 (변수 1-43) 및 제품 소유권 (변수 44-86)을 포함하는 86 개의 변수로 구성된다. 사회 인구 학적 데이터는 우편 번호에서 파생된다. 우편 번호가 동일한 지역에 거주하는 모든 고객은 동일한 사회 인구 학적 속성을 갖는다. 변수 86 (구매)은 고객이 캐러밴 보험을 구매했는지 여부를 나타낸다. 개별 변수에 대한 자세한 정보는 http://www.liacs.nl/~putten/library/cc2000/data.html에서 얻을 수 있다.
+
+### 1. Caravan2 EDA
+
+데이터 분석에 앞서 분석의 목적과 변수 특징을 확인하는 것은 기본이다. 그리고 데이터 셋을 확인하고 필요시 전처리를 하였다.
+
+#### 1-1. 데이터 로드 및 조회
+
+```{r}
+load("C:/Users/so/Desktop/데이터마이닝/Caravan2.Rdata")
+df <- Caravan2
+#str(df) #변수가 86개로 매우 많아서 주석 처리
+dim(df); head(df,10)
+table(df$Purchase)
+df$Purchase = ifelse(df$Purchase == 'No', 0, 1)
+str(df$Purchase)
+```
+데이터의 기본 구조를 살펴보자. Caravan2 데이터는 696개의 행, 86개의 열로 이루어져 있다. 열은 86개 변수를 의미하며 범주형 변수 1개, 숫자형 변수 85개로 구성되어 있다. 여기서 Purchase를 반응변수(Y)로 하고 나머지 변수를 피처(X)로 사용한다. 이때, 예측할 변수 Purchase는 factor처리 되어있고 이외에 모든 변수는 수치형 데이터이다. Purchase는 응답값이 No 또는 Yes인 질적 변수로, No를 0, Yes를 1로 처리한다. 
+
+#### 1-2. 결측값 유무 확인
+
+```{r}
+colSums(is.na(df)) 
+```
+분석과 예측에 있어 결측값이 있으면 잘못된 결과를 보일 수도 있기 때문에 확인이 필요하다. 다행히 Caravan2 데이터셋에 결측값은 없었다.
+
+#### 1-3. 수치 데이터들의 분포 확인
+
+```{r}
+#summary(df[1:85])
+boxplot(df[1:40])
+boxplot(df[41:85])
+
+summary(df[c(74,53)]) # AWERKT PWERKT 
+#boxplot(df[c(74,53)])
+
+# Purchase 균등한 클래스를 가지는 것을 확인
+p <-df %>%
+    ggplot(aes(x=factor(Purchase)))+
+    geom_bar(aes(x=factor(Purchase),fill=factor(Purchase)))+theme_classic()
+
+p + scale_fill_manual(values = c( "#FFCC00", "#FF6600"))
+```
+Purchase 변수를 제외한 모든 수치형 변수들의 대략적인 분포를 확인한 결과, 대부분의 변수는 값들이 0~10까지 퍼져있는 것으로 확인되나, 몇몇 소수의 변수는 값들이 0 또는 최댓값에 몰려있는 것으로 확인된다. 대표적으로 'MBERBOER', 'MSKD', 'MINK123M', 'PWABEDR', 'PWALAND' 변수등이 있다. 'PVRAAUT', 'PWERKT' 변수는 변수값들이 모두 0인 것으로 파악됐다. 추가적으로 Purchase의 class 비율이 같음을 시각적으로 확인하였다.
+
+#### 1-3(2). dlookr 라이브러리를 활용한 데이터상태 확인
+
+```{r}
+library(dlookr)
+
+# 데이터에 포함된 모든 변수의 타입, 결측값, 고유값을 확인할 수 있는 함수
+diagnose(df) 
+
+# 결측값 있는 변수만 많은 순서대로 정렬
+df %>% 
+  diagnose() %>% 
+  filter(missing_count > 0) %>%
+  arrange(desc(missing_count))
+
+# 수치형 데이터
+diagnose_numeric(df)
+
+# 이상치 ; 이상치 비율이 높은 순서대로 정렬
+df %>% 
+  diagnose_outlier() %>% 
+  arrange(desc(outliers_ratio))
+```
+1-3에서 확인했듯 결측값은 없다. Caravan2 데이터는 86개의 많은 변수를 가지므로 추가적으로 이상치를 확인해 보았다. 반응변수를 제외한 64개 변수에서 이상치가 있고 전체평균(with_mean)과 이상치 제외 평균(without_mean)의 차이가 눈에 띄게 큰 차이는 없어 보인다. 따라서 이상치를 대체하는 과정은 생략하겠다.
+
+### 2. 데이터 분리
+
+```{r}
+n=nrow(df)
+
+set.seed(1124)
+tr.ind <- sample(1:n, floor(n * 0.8))
+train <- df[tr.ind,]
+test <- df[-tr.ind,]
+```
+training set, test set을 8:2 비율로 분할하였다. train은 556개의 데이터, test는 140개의 데이터를 가지게 된다.
+
+### 3. build and train the model
+
+본격적으로 모형개발을 시작해보자. 우리는 반응변수 Purchase가 yes, no의 두 가지 값을 가지는 분류 문제로 총 5가지의 모형족을 가지고 모형 평가를 하려고 한다.
+
+  - **모형족** : 나이브 벤치마크, k-최근접이웃, 로지스틱 라쏘 선형회귀, 랜덤 포레스트, 그래디언트 부스팅
+
+따라서 각 모형족에 대하여 모형평가를 훈련세트에 5-fold cv를 적용하여 교차검증 오류를 계산하고 오류측도 및 해석가능성을 종합적으로 고려하여 최종 모형 두 개를 선정할 것이다. 이때 고려되는 오류 측도는 아래와 같다.
+
+  - **오류측도** 
+    - Error Rate(오분류율) : 작을수록 좋은 것
+    - Sensitivity(민감도)  : 민감도란 실제 True인 것 중에서 모델이 True라고 예측한 것의 비율이다. ;클수록 좋은 것
+    - Specificity(특이도)  : 클수록 좋은 것
+    - Precision(정밀도) : 클수록 좋은 것
+    
+    참고문헌: https://bcho.tistory.com/1206
+
+```{r}
+err_er <- function(tbl, tr, val){
+  return(ifelse((tbl[1]+tbl[2])==nrow(val), tbl[2]/nrow(tr), (tbl[3]+tbl[2])/sum(tbl)))
+}
+
+err_sen <- function(tbl, val){
+  return(ifelse((tbl[1]+tbl[2])==nrow(df.val), 0, tbl[4]/(tbl[2]+tbl[4])))
+}
+
+err_spe <- function(tbl, val){
+  return(ifelse((tbl[1]+tbl[2])==nrow(df.val), 1, tbl[1]/(tbl[1]+tbl[3])))
+}
+
+err_pre <- function(tbl, val){
+  return(ifelse((tbl[3]+tbl[4])==0, 0, (tbl[4])/(tbl[3]+tbl[4])))
+}
+```
+    
+#### 3-1. 나이브 벤치마크
+
+```{r}
+K = 5; n = nrow(train)
+result <- matrix(NA, ncol = 4, nrow = 5)
+colnames(result) <- c("Error rate", "Sensitivity", "Specificity", "Precision")
+rownames(result) <- c("1fold","2fold","3fold","4fold","5fold")
+
+for (k in 1:K) {
+  set.seed(k*1124)
+  ind.shf <- sample(1:n, size=n)
+  ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+  ind.tr = setdiff(1:n, ind.val)
+  df.tr = train[ind.tr,]
+  df.val = test[ind.val,]
+
+  yhat.naive = ifelse(mean(df.tr$Purchase) > 0.5, 1, 0)
+  yhat.naive.vec = factor(rep(yhat.naive, times = nrow(df.val)), levels=c(0,1))
+
+  t = table(df.val$Purchase, yhat.naive.vec)
+
+  result[k,1] <- err_er(t, df.tr, df.val)
+  result[k,2] <- err_sen(t, df.val)
+  result[k,3] <- err_spe(t, df.val)
+  result[k,4] <- err_pre(t, df.val)
+}
+```
+Purchase의 'Yes'가 majority class 이므로 'Yes'를 예측값으로 사용하였다.
+
+```{r}
+error.naive = apply(result,2,mean)
+names(error.naive) <- c("Error rate", "Sensitivity", "Specificity", "Precision")
+data.frame("mean"=error.naive)
+```
+5-fold의 값들을 평균내어 오류측도를 살펴보자. Error rate는 0.591319, Sensitiviy는 0.8, Specificity는 0.2, Precision는 0.3118163의 값이 나오는 것을 볼 수 있다.
+
+
+#### 3-2. k-최근접이웃
+
+```{r}
+K=5
+cv5.knn <- function(num) { #k clustering의 k
+
+  error.knn <- matrix(NA, ncol = 4, nrow = 5)
+  colnames(error.knn) <- c("Error rate", "Sensitivity", "Specificity", "Precision")
+  rownames(error.knn) <- c("1fold","2fold","3fold","4fold","5fold")
+  
+  for (k in 1:K) {
+    
+    set.seed(1124*k)
+    n = nrow(train)
+    ind.shf <- sample(1:n, size = n)
+    ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+    ind.tr = setdiff(1:n, ind.val)
+    
+    df.tr = train[ind.tr,]
+    df.val = train[ind.val,]
+    
+    df.tr.x = df.tr[,-86]
+    df.tr.y = df.tr[,86]
+    df.val.x = df.val[,-86]
+    df.val.y = df.val[,86]
+    
+    knn.obj <- knn(df.tr.x, df.val.x, cl=df.tr.y, k = num)
+    t <- table(knn.obj, df.val.y)
+    
+    x.df.tr <- model.matrix(Purchase ~ . ,data=df.tr)
+    y.df.tr <- df.tr[,86]
+    x.df.te <- model.matrix(Purchase ~ . ,data=df.val)
+    y.df.te <- df.val[,86]
+    
+    t <- table(knn.obj, df.val.y)
+    
+    error.knn[k,1] <- err_er(t, df.tr, df.val)
+    error.knn[k,2] <- err_sen(t, df.val)
+    error.knn[k,3] <- err_spe(t, df.val)
+    error.knn[k,4] <- err_pre(t, df.val)
+  }
+return(error.knn)
+}
+```
+
+knn에서의 k는 1~100까지 변화시켜가며 확인해 보았다.
+
+```{r}
+# 5-fold k-nn의 k부분을 바꿔가며 함수 호출 ==> store.error.knn[[1]] k=1일 때 5-fold
+store.error.knn <- list()
+for (i in 1:100) {
+  store.error.knn[[i]] <- cv5.knn(i)
+}
+
+# 5-fold k-nn의 error means
+error.knn.mean <- matrix(NA, ncol = 4, nrow = 100)
+colnames(error.knn.mean) <- c("Error rate", "Sensitivity", "Specificity", "Precision")
+for (i in 1:100) {
+  error.knn.mean[i,] = apply(cv5.knn(i), 2, mean)
+}
+
+head(data.frame("mean"=error.knn.mean))
+
+# 최적의 k-nn k찾기
+# 오분류율 최솟값은 몇번째 k-nn?
+which.min(error.knn.mean[,1]) #[1] 62
+# 민감도 최댓값은 몇번째 k-nn?
+which.max(error.knn.mean[,2]) #[1] 22
+# 특이도 최댓값은 몇번째 k-nn?
+which.max(error.knn.mean[,3]) #[1] 62
+# 정밀도 최댓값은 몇번째 k-nn?
+which.max(error.knn.mean[,4]) #[1] 62
+
+
+optimal.knn = 62
+cat(" knn의 k=62일때,\n" 
+    ," 오분류율 =",error.knn.mean[optimal.knn,1],"\n"
+    ," 민감도 =",error.knn.mean[optimal.knn,2],"\n"
+    ," 특이도 =",error.knn.mean[optimal.knn,3],"\n"
+    ," 정밀도 =",error.knn.mean[optimal.knn,4],"\n")
+
+```
+오분류율이 제일 적은 k값은 62이며 이 때의 오분류율은 0.3531532이다. 민감도가 제일 큰 k값은 22이다. 이 때의 민감도는 0.6590109이다. 특이도의 측면에서 볼 때, k가 62일 때, 최대의 값 0.6274371을 가지는 것을 볼 수 있다. 정밀도가 제일 큰 k값도 62인 것을 볼 수 있다.이 때의 정밀도는 0.7471129이다. 전반적으로 k = 62일 때, 오분류율, 특이도, 정밀도에서 좋은 분류를 나타내므로 최적의 k를 62로 설정하였다.
+
+#### 3-3. 로지스틱 라쏘 선형회귀
+
+```{r}
+options(scipen=100)
+K = 5; 
+grid = 10^seq(from=2, to=-2, length=50)
+cv5.lasso <- function() {
+
+  a = list(); b = list()
+  # error.lasso <- matrix(NA, ncol = 4, nrow = 5*length(grid))
+  # colnames(error.lasso) <- c("Error rate", "Sensitivity", "Specificity", "Precision")
+  
+    for (k in 1:K) {
+      
+      set.seed(1124*k)
+      n = nrow(train)
+      ind.shf <- sample(1:n, size = n)
+      ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+      ind.tr = setdiff(1:n, ind.val)
+      df.tr = train[ind.tr,]
+      df.val = train[ind.val,]
+      
+      x.df.tr <- model.matrix(Purchase ~ . ,data=df.tr)
+      y.df.tr <- df.tr[,86]
+      x.df.val <- model.matrix(Purchase ~ . ,data=df.val)
+      y.df.val <- df.val[,86]
+      
+      for (g in 1:length(grid)) {
+        lasso.obj <- glmnet( x.df.tr, y.df.tr, family = "binomial" , alpha=1, lambda = grid[g] )
+        yhat.lasso = cbind(1, x.df.val) %*% coef(lasso.obj)
+        yhat.lasso.vec = ifelse(yhat.lasso >= 0.5, 1, 0)
+        yhat.lasso.vec = factor(yhat.lasso.vec, levels = c(0,1))
+        
+        t = table(y.df.val, yhat.lasso.vec)
+        a[[g]]<-c(err_er(t, df.tr, df.val), err_sen(t, df.val), err_spe(t, df.val), err_pre(t, df.val))
+
+      }
+      b[[k]] <- a # 그리드 마다 생성된 각각의 오류값 50개 * 5 (k-fold) 250개 리스트 중첩
+    }
+  return(b)
+}
+
+error.lasso = cv5.lasso()
+```
+
+```{r}
+a = matrix(NA, ncol = 4, nrow = 5)
+total = matrix(NA, ncol = 4, nrow = 50)
+count = 1
+
+for(g in 1:length(grid)) {
+  for(k in 1:K) {
+    a[k,] = t(matrix(error.lasso[[k]][[g]])) # a는 fold마다의 값 저장
+    if (count == 5) {
+      total[g,] = colMeans(a)
+      count = 0
+    }
+    count = count + 1
+  }
+}
+
+# aa=which.min(total[,1]) 
+# bb=which.max(total[,2]) 
+# cc=which.max(total[,3])
+# dd=which.max(total[,4]) 
+# idxs = c(aa, bb, cc, dd)
+
+idxs <- c(order(total[,1], decreasing = F)[1:10],
+          order(total[,2], decreasing = T)[1:10],
+          order(total[,3], decreasing = T)[1:10],
+          order(total[,4], decreasing = T)[1:10])
+
+total[unique(idxs),]
+unique(idxs)[11]
+#최적의 모수
+optimal.lasso.idx = 48
+optimal.lasso = grid[optimal.lasso.idx]
+
+cat(" lasso의 lambda=",optimal.lasso,"일때,\n" 
+    ,"오분류율 =",total[optimal.lasso.idx,1],"\n"
+    ,"  민감도 =",total[optimal.lasso.idx,2],"\n"
+    ,"  특이도 =",total[optimal.lasso.idx,3],"\n"
+    ,"  정밀도 =",total[optimal.lasso.idx,4],"\n")
+```
+grid(0.01~100)에 따라 구해진 오분류율과 민감도, 특이도, 정밀도가 total에 들어있다. 여기서 전체적인 부분을 고려하여 최적의 lambda를 구해보려한다. 우선 오분류율이 적더라도 민감도와 정밀도가 0인 것은 좋지 않다고 판단하여, 48번째에 해당하는 람다를 선정하게 되었다. 즉, 5fold cv를 진행하였을 때, 최적의 lambda값은 0.01456348이고, 이 때의 오분류율은 0.3657658, 민감도는 0.5030251, 특이도는 0.7958438, 정밀도는 0.7518052이다. 
+
+grid에 따라 구해진 오류측도들을 그려보았다.
+```{r}
+plot(log10(grid), total[,1], col = "red", type = "l")
+par(new = T)
+plot(log10(grid), total[,2], col = "blue", type = "l")
+par(new = T)
+plot(log10(grid), total[,3], col = "green", type = "l")
+par(new = T)
+plot(log10(grid), total[,4], col = "pink", type = "l", xlab = "grid", ylab = "오류측도")
+par(new = T)
+
+legend("right",c('오분류율','민감도','특이도','정밀도'),col=c('red','blue','green','pink'),lty=c(1,1,1,1))
+
+```
+
+
+#### 3-4. 랜덤 포레스트
+
+```{r}
+K = 5
+n = nrow(train)
+p = ncol(train) - 1
+hp = expand.grid(
+      B = c(50,100,500),
+      m = sqrt(p):sqrt(p/2))
+
+cv5.rf <- function(B,m) {
+  error.rf <- matrix(NA, ncol = 4, nrow = 5)
+
+  for (k in 1:K) {
+        
+      set.seed(1124*k)
+      
+      p = ncol(df.tr) - 1
+      n = nrow(train)
+      ind.shf <- sample(1:n, size = n)
+      ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+      ind.tr = setdiff(1:n, ind.val)
+      df.tr = train[ind.tr,]
+      df.val = train[ind.val,]
+  
+      x.df.tr <- df.tr[,-86]
+      df.tr$Purchase <- factor(df.tr$Purchase)
+      x.df.val <- df.val[,-86]
+      df.val$Purchase <- factor(df.val$Purchase)
+      
+      obj.rf = randomForest(Purchase ~. , data=df.tr, ntree=B ,mtry=m, importance=TRUE)
+      
+      yhat.rf = predict(obj.rf, x.df.val,type = "prob")
+      yhat.rf.vec = ifelse(yhat.rf[,1] >= yhat.rf[,2], 0, 1) # 0이 no
+
+      t = table(df.val$Purchase, yhat.rf.vec)
+      error.rf[k,1] <- err_er(t, df.tr, df.val)
+      error.rf[k,2] <- err_sen(t, df.val)
+      error.rf[k,3] <- err_spe(t, df.val)
+      error.rf[k,4] <- err_pre(t, df.val)
+  }
+  
+  return(error.rf)
+}
+
+error.rf <- list()
+for(i in 1:nrow(hp)){
+error.rf[[i]] <- cv5.rf(hp$B[i],hp$m[i])
+}  
+
+```
+
+B와 mtry에 따른 성능비교를 해보았다.
+
+```{r}
+# 5-fold rf의 error means
+error.rf.mean <- matrix(NA, ncol = 4, nrow = nrow(hp))
+colnames(error.rf.mean) <- c("Error rate", "Sensitivity", "Specificity", "Precision")
+for (i in 1:nrow(hp)) {
+  error.rf.mean[i,] = apply(error.rf[[i]], 2, mean)
+}
+
+# 9조합의 초모수에 따른 RF
+a=which.min(error.rf.mean[,1]) 
+b=which.max(error.rf.mean[,2]) 
+c=which.max(error.rf.mean[,3]) 
+d=which.max(error.rf.mean[,4]) 
+
+cat(" RF,\n" 
+    ," 오분류율 최솟값 =>",a,"번 조합의 hp\n"
+    ,"  민감도 최댓값 =>",b,"번 조합의 hp\n"
+    ,"  특이도 최댓값 =>",c,"번 조합의 hp\n"
+    ,"  정밀도 최댓값 =>",d,"번 조합의 hp\n")
+
+# hp=2
+idxs = c(a, b, c, d)
+idxs
+#최적의 모수
+optimal.rf.idx = as.numeric(names(which.max(table(idxs))))
+error.rf.mean[optimal.rf.idx,]
+
+optimal.rf.depth = hp[optimal.rf.idx,1]
+optimal.rf.shrink = hp[optimal.rf.idx,2]
+optimal.rf.depth
+optimal.rf.shrink
+```
+오분류율, 민감도, 특이도, 정밀도 모두를 고려했을 때, 가장 최적의 조합은 2번의 조합이다. 즉, random forest의 depth를 100으로, shrink를 9.219544로 설정하는 조합을 의미한다. 이 조합에서의 오분류율은 0.3387387, 민감도는 0.6618635, 특이도는 0.6634744, 정밀도는 0.7066428임을 알 수 있다.
+
+# hp.result 5번 조합 randomforest에서 변수중요도 check
+```{r}
+df.tr$Purchase = factor(df.tr$Purchase)
+model.rf = randomForest(Purchase ~. , data=df.tr , ntree=optimal.rf.depth, mtry=optimal.rf.shrink, importance=TRUE)
+
+plot(model.rf)
+varImpPlot(model.rf)
+```
+
+* 'PRERSAUT'변수가 불순도 감소에 가장 큰 기여를 한 변수로 파악된다.
+
+
+#### 3-5. 그래디언트 부스팅
+
+```{r, warning=F}
+# train <- train[,-71]
+# train <- train[,-74]
+# train <- train[,-50]
+# train <- train[,-53]
+# train <- train[,-68]
+
+hp = expand.grid(
+  depth = c(1:5), 
+  shrink = c(0.02,0.01,0.1,0.3,0.5)
+)
+
+max.tree = 500 ;
+# B = 10, 20, ...., 1000
+n.tree.seq = seq(from=10, to=max.tree, by=10)
+
+hp.res = NULL ;
+store.gbm = NULL ;
+for (k in 1:K) {
+  
+  set.seed(1124*k)
+  n = nrow(train)
+  ind.shf <- sample(1:n, size = n)
+  ind.val = ind.shf[(floor(n/K)*(k-1)+1):(floor(n/K)*k)]
+  ind.tr = setdiff(1:n, ind.val)
+  df.tr = train[ind.tr,]
+  df.val = train[ind.val,]
+  
+  x.df.tr <- df.tr[,-86]
+  df.tr$Purchase <- as.character(df.tr$Purchase)
+  x.df.val <- df.val[,-86]
+  df.val$Purchase <- as.character(df.val$Purchase)
+   
+    for (i in 1:nrow(hp) ) { # 25개 조합
+    	# print(i)
+      # train
+    	obj.gbm = gbm(Purchase ~ ., data=df.tr, distribution = "bernoulli", 
+    	              n.trees = max.tree, shrinkage = hp$shrink[i], interaction.depth = hp$depth[i])
+	  
+      ###################### measure errors (n.tree.seq measured simultaneously)
+    	yhat.gbs = predict(obj.gbm, newdata = df.val, type="response", n.tree = n.tree.seq) 
+    	# n.tree=벡터로 넣으면 컬럼으로 predict 내보냄
+    	# yhat.gbs = matrix 
+    
+      ###################### calculate and store the errors (or performance measures)
+  	
+    for (j in 1:length(n.tree.seq)) {
+  		n.tree = n.tree.seq[j]
+  		yhat.gb = yhat.gbs[ ,j]
+  		
+  		yhat.gb.vec = ifelse(yhat.gb >= 0.5, 1, 0)
+  		yhat.gb.vec = factor(yhat.gb.vec, levels = c(0,1))
+      t = table(df.val$Purchase, yhat.gb.vec)
+      
+      gbmTemp = data.frame("er" = err_er(t, df.tr, df.val), "sen" = err_sen(t, df.val),
+                             "spe" = err_spe(t, df.val), "Pre" = err_pre(t, df.val))
+      
+  		resTemp = data.frame( 
+  			depth = hp$depth[i],
+  			shrink = hp$shrink[i],
+  			n.tree = n.tree)
+  
+  		hp.res = rbind(hp.res, resTemp);
+  		store.gbm = rbind(store.gbm, gbmTemp);
+    }
+  }
+  hp.res = cbind(hp.res, store.gbm)
+  return(hp.res)
+}
+
+```
+
+```{r}
+# 각 오류측도를 최적으로 만드는 상위 조합을 10개씩 뽑아 비교
+idxs <- c(order(hp.res$er, decreasing=FALSE)[1:10],
+          order(hp.res$sen, decreasing=T)[1:10],
+          order(hp.res$spe, decreasing=T)[1:10],
+          order(hp.res$Pre, decreasing=T)[1:10])
+idxs
+
+optimal.gbm.idx = as.numeric(names(which.max(table(idxs))))
+hp.res[optimal.gbm.idx,]
+
+optimal.gbm.depth = hp.res[optimal.gbm.idx,1]
+optimal.gbm.shrink = hp.res[optimal.gbm.idx,2]
+optimal.gbm.ntree = hp.res[optimal.gbm.idx,3]
+```
+오분류율, 민감도, 특이도, 정밀도 모두를 고려했을 때, 가장 최적의 조합은 1204번의 조합이다. 오분류율, 민감도, 특이도, 정밀도 각각의 최적의 모수를 보는 것으로는 결론이 나지 않아, 각각의 오류지표에서 상위 10개씩 뽑아, 가장 많이 나온 조합을 선택하였다. 즉, gradient boosting의 depth를 5로, shrink를 0.5, n.tree를 40으로 설정하는 조합을 의미한다. 이 조합에서의 오분류율은 0.3063063, 민감도는 0.6607143, 특이도는 0.7272727, 정밀도는 0.7115385임을 알 수 있다.
+
+### 4. 모형선택
+
+### 4-1. 모형에 따른 성능 비교
+```{r}
+error.stack <- NULL;
+error.stack <- rbind(error.stack, error.naive, error.knn.mean[optimal.knn,], total[optimal.lasso.idx,], error.rf.mean[optimal.rf.idx,], store.gbm[optimal.gbm.idx,])
+rownames(error.stack) <- c("naive", "knn", "lasso", "rf", "gbm")
+error.stack
+a=which.min(error.stack[,1])
+b=which.max(error.stack[,2])
+c=which.max(error.stack[,3])
+d=which.max(error.stack[,4])
+
+print(c(a,b,c,d))
+```
+오분류율만 보았을 때, 가장 좋은 모형은 gbm 모형, 민감도만 보았을 때 가장 좋은 모형은 naive모형, 특이도만 보았을 때 가장 좋은 모형은 lasso, 정밀도만 보았을 때 가장 좋은 모형은 lasso임을 알 수 있다. 하지만 전체적으로 모형의 오류측도 및 해석가능성을 고려하였을 때, 오분류율이 작고, 민감도, 특이도, 정밀도가 큰 값으로 가지는 모형은 lasso와 gbm으로 보인다. 따라서 최종적으로 lasso와 gradient boosting모형을 선택하게 되었다. 
+
+### 4-2. 테스트세트 오류
+이제 선택된 모형들을 훈련세트 전체에서 재적합한 후, 테스트세트 오류를 구해보자.
+
+```{r}
+# lasso
+train.x =  model.matrix(Purchase~.,data = train)
+train.y = factor(train[,86])
+test.x = model.matrix(Purchase~.,data = test)
+test.y = factor(test[,86])
+
+lasso.obj <- glmnet(train.x, train.y, family = "binomial" , alpha=1, lambda = optimal.lasso )
+yhat.lasso = cbind(1, test.x) %*% coef(lasso.obj)
+yhat.lasso.vec = ifelse(yhat.lasso >= 0.5, 1, 0)
+yhat.lasso.vec = factor(yhat.lasso.vec, levels = c(0,1))
+        
+t = table(test.y, yhat.lasso.vec)
+test.lasso <- data.frame("er" = err_er(t, train, test), "sen" = err_sen(t, test),
+                             "spe" = err_spe(t, test), "Pre" = err_pre(t, test))
+# # random forest
+# test.x = test[,-86]
+# train$Purchase = factor(train$Purchase)
+# obj.rf = randomForest(Purchase ~. , data=train, ntree=optimal.rf.depth ,mtry=optimal.rf.shrink, importance=TRUE)
+#       
+# yhat.rf = predict(obj.rf, test.x,type = "prob")
+# yhat.rf.vec = ifelse(yhat.rf[,1] >= yhat.rf[,2], 0, 1) # 0이 no
+# 
+# t = table(test$Purchase, yhat.rf.vec)
+# test.rf <- data.frame("er" = err_er(t, train, test), "sen" = err_sen(t, test),
+#                       "spe" = err_spe(t, test), "Pre" = err_pre(t,test))
+
+# gradient boosting
+train$Purchase <- as.character(train$Purchase)
+test$Purchase <- as.character(test$Purchase)
+
+obj.gbm = gbm(Purchase ~ ., data=train, distribution = "bernoulli", n.trees = optimal.gbm.ntree, shrinkage = optimal.gbm.shrink, interaction.depth = optimal.gbm.depth)
+	  
+yhat.gbs = predict(obj.gbm, newdata = test, type="response") 
+yhat.gb.vec = ifelse(yhat.gbs >= 0.5, 1, 0)
+yhat.gb.vec = factor(yhat.gb.vec, levels = c(0,1))
+t = table(test$Purchase, yhat.gb.vec)
+
+test.gbm <- data.frame("er" = err_er(t, train, test), "sen" = err_sen(t, test),
+                             "spe" = err_spe(t, test), "Pre" = err_pre(t, test))
+
+final <- rbind(test.lasso, test.gbm)
+rownames(final) <- c("lasso", "gbm")
+print(final)
+```
+테스트 에러로 lasso 모형과 gradient boosting 모형을 비교하였을 때, 오분류율, 특이도, 정밀도 면에서 lasso가 우수한 것을 볼 수 있다. 민감도 측면에서는 gradient boosting 모형이 우수한 것을 알 수 있다. 하지만 lasso와 gradient boosting의 오류측도 값들은 서로 큰 차이가 나지 않는 것을 볼 수 있다. 최종적으로는 lasso 모형이 가장 좋은 성능을 가진 모형으로 확인된다.
+
+
+최종 모델인 random forest를 이용하여 ROC곡선을 그려보고 AUC를 알아보자.
+```{r}
+fit.prob <- exp(yhat.lasso) / (1 + exp(yhat.lasso))
+r <- roc(test$Purchase, as.vector(fit.prob))
+plot.roc(r)
+print(auc(r))
+```
+
+구해진 ROC곡선으로 구한 AUC는 0.7179임을 볼 수 있다.
